@@ -44,7 +44,9 @@ def test_full_codeatlas_pipeline(tmp_path: Path):
     auth_node = auth_matches[0]
 
     callees = gq.get_callees(auth_node)
-    assert any("parse_jwt" in c or "_extract_token" in c or "verify_signature" in c for c in callees)
+    assert any(
+        "parse_jwt" in c or "_extract_token" in c or "verify_signature" in c for c in callees
+    )
 
     # 4. Impact Analysis
     impact = gq.impact_analysis(auth_node)

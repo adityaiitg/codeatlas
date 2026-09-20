@@ -63,7 +63,9 @@ def index(
     table.add_row("Vector Embeddings", str(stats.get("vectors", 0)))
 
     console.print(table)
-    console.print(f"[bold green]✓ Indexing complete![/bold green] Database saved to [italic]{settings.db_path}[/italic]\n")
+    console.print(
+        f"[bold green]✓ Indexing complete![/bold green] Database saved to [italic]{settings.db_path}[/italic]\n"
+    )
 
 
 @app.command()
@@ -71,8 +73,12 @@ def search(
     query: str = typer.Argument(..., help="Search query (natural language or symbol name)"),
     path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
     limit: int = typer.Option(5, "--limit", "-l", help="Number of results to return"),
-    mode: str = typer.Option("hybrid", "--mode", "-m", help="Search mode: hybrid, lexical, semantic"),
-    expand: bool = typer.Option(True, "--expand/--no-expand", help="Expand graph neighborhood context"),
+    mode: str = typer.Option(
+        "hybrid", "--mode", "-m", help="Search mode: hybrid, lexical, semantic"
+    ),
+    expand: bool = typer.Option(
+        True, "--expand/--no-expand", help="Expand graph neighborhood context"
+    ),
 ):
     """Hybrid code search with BM25, dense vectors, and graph neighborhood expansion."""
     settings = get_settings(path)
@@ -88,7 +94,9 @@ def search(
         console.print(f"[yellow]No results found for query:[/yellow] '{query}'")
         return
 
-    console.print(f"\n[bold green]Found {len(results)} matches for:[/bold green] '{query}' (Mode: {mode})\n")
+    console.print(
+        f"\n[bold green]Found {len(results)} matches for:[/bold green] '{query}' (Mode: {mode})\n"
+    )
 
     for idx, r in enumerate(results, start=1):
         rel_path = Path(r.file_path).name
@@ -112,7 +120,9 @@ def search(
                 f"[bold cyan]{n['kind']}[/bold cyan] [underline]{n['name']}[/underline] ({Path(n['file_path']).name}:{n['start_line']})"
                 for n in r.neighbors[:4]
             ]
-            console.print("  [italic dim]↳ Graph Neighbors:[/italic dim] " + " | ".join(neighbor_strs))
+            console.print(
+                "  [italic dim]↳ Graph Neighbors:[/italic dim] " + " | ".join(neighbor_strs)
+            )
             console.print()
 
 
@@ -125,7 +135,9 @@ def graph(
     """Explore callers, callees, and dependencies for a symbol."""
     settings = get_settings(path)
     if not settings.db_path.exists():
-        console.print("[bold red]Error:[/bold red] Repository not indexed. Run 'codeatlas index' first.")
+        console.print(
+            "[bold red]Error:[/bold red] Repository not indexed. Run 'codeatlas index' first."
+        )
         raise typer.Exit(code=1)
 
     gq = GraphQueries(settings.db_path)
@@ -161,9 +173,13 @@ def graph(
 
     # Neighborhood expansion
     expanded = gq.expand_neighborhood([target_node], depth=depth)
-    other_neighbors = [n for n in expanded if n != target_node and n not in callers and n not in callees]
+    other_neighbors = [
+        n for n in expanded if n != target_node and n not in callers and n not in callees
+    ]
     if other_neighbors:
-        other_branch = tree.add(f"[bold magenta]Connected Context ({len(other_neighbors)}):[/bold magenta]")
+        other_branch = tree.add(
+            f"[bold magenta]Connected Context ({len(other_neighbors)}):[/bold magenta]"
+        )
         for o in other_neighbors[:10]:
             other_branch.add(f"[dim]{o}[/dim]")
 
@@ -178,7 +194,9 @@ def impact(
     """Analyze change impact and blast radius if a symbol is modified."""
     settings = get_settings(path)
     if not settings.db_path.exists():
-        console.print("[bold red]Error:[/bold red] Repository not indexed. Run 'codeatlas index' first.")
+        console.print(
+            "[bold red]Error:[/bold red] Repository not indexed. Run 'codeatlas index' first."
+        )
         raise typer.Exit(code=1)
 
     gq = GraphQueries(settings.db_path)
@@ -198,13 +216,15 @@ def impact(
     target_node = matches[0]
     analysis = gq.impact_analysis(target_node)
 
-    console.print(Panel(
-        f"[bold red]Impact Analysis for:[/bold red] [underline]{target_node}[/underline]\n\n"
-        f"• [bold]Direct Dependents:[/bold] {len(analysis['direct_dependents'])}\n"
-        f"• [bold]Total Downstream Affected Nodes:[/bold] {analysis['affected_count']}",
-        title="Blast Radius Assessment",
-        border_style="red" if analysis['affected_count'] > 5 else "yellow",
-    ))
+    console.print(
+        Panel(
+            f"[bold red]Impact Analysis for:[/bold red] [underline]{target_node}[/underline]\n\n"
+            f"• [bold]Direct Dependents:[/bold] {len(analysis['direct_dependents'])}\n"
+            f"• [bold]Total Downstream Affected Nodes:[/bold] {analysis['affected_count']}",
+            title="Blast Radius Assessment",
+            border_style="red" if analysis["affected_count"] > 5 else "yellow",
+        )
+    )
 
     if analysis["direct_dependents"]:
         table = Table(title="Directly Dependent Symbols", show_header=True)
@@ -217,13 +237,17 @@ def impact(
 @app.command()
 def wiki(
     action: str = typer.Argument("generate", help="Action: 'generate' or 'view'"),
-    topic: str = typer.Option("index", "--topic", "-t", help="Topic to view (e.g. index, architecture, workflows)"),
+    topic: str = typer.Option(
+        "index", "--topic", "-t", help="Topic to view (e.g. index, architecture, workflows)"
+    ),
     path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
 ):
     """Generate or view the living repository wiki."""
     settings = get_settings(path)
     if not settings.db_path.exists():
-        console.print("[bold red]Error:[/bold red] Repository not indexed. Run 'codeatlas index' first.")
+        console.print(
+            "[bold red]Error:[/bold red] Repository not indexed. Run 'codeatlas index' first."
+        )
         raise typer.Exit(code=1)
 
     if action == "generate":
@@ -243,7 +267,9 @@ def wiki(
             target_file = settings.wiki_dir / "modules" / f"{topic}.md"
 
         if not target_file.exists():
-            console.print(f"[yellow]Wiki chapter '{topic}' not found in {settings.wiki_dir}[/yellow]")
+            console.print(
+                f"[yellow]Wiki chapter '{topic}' not found in {settings.wiki_dir}[/yellow]"
+            )
             return
 
         content = target_file.read_text(encoding="utf-8")
@@ -258,7 +284,9 @@ def status(
     settings = get_settings(path)
     git_tracker = GitTracker(settings.repo_path)
 
-    head_commit = git_tracker.get_head_commit() if git_tracker.is_git_repo else "Not a git repository"
+    head_commit = (
+        git_tracker.get_head_commit() if git_tracker.is_git_repo else "Not a git repository"
+    )
     changed = git_tracker.get_changed_files() if git_tracker.is_git_repo else []
 
     db_exists = settings.db_path.exists()
@@ -276,6 +304,7 @@ def status(
 
     if db_exists:
         from codeatlas.graph.builder import GraphBuilder
+
         gb = GraphBuilder(settings.db_path)
         stats = gb.get_stats()
         gb.close()

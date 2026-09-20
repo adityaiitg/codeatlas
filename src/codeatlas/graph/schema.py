@@ -1,5 +1,8 @@
 """SQLite schema for the code knowledge graph."""
 
+import sqlite3
+from pathlib import Path
+
 SCHEMA_SQL = """
 -- Symbols table (graph nodes)
 CREATE TABLE IF NOT EXISTS symbols (
@@ -79,9 +82,6 @@ CREATE INDEX IF NOT EXISTS idx_symbols_name ON symbols(name);
 CREATE INDEX IF NOT EXISTS idx_chunks_file ON chunks(file_path);
 CREATE INDEX IF NOT EXISTS idx_chunks_symbol ON chunks(symbol_id);
 """
-
-import sqlite3
-from pathlib import Path
 
 
 def connect_db(db_path: Path) -> sqlite3.Connection:

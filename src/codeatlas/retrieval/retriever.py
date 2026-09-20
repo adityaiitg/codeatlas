@@ -112,9 +112,7 @@ class Retriever:
 
         chunk_ids = [r[0] for r in rows]
         dim = rows[0][2]
-        doc_vecs = np.array(
-            [np.frombuffer(r[1], dtype=np.float32) for r in rows], dtype=np.float32
-        )
+        doc_vecs = np.array([np.frombuffer(r[1], dtype=np.float32) for r in rows], dtype=np.float32)
 
         query_vec = self.embedder.embed_query(query)
         if query_vec.shape[0] != dim:

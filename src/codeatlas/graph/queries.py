@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
 import networkx as nx
@@ -94,8 +93,12 @@ class GraphQueries:
         return path
 
     def _dfs_calls(
-        self, node_id: str, path: list[str], visited: set[str],
-        max_depth: int, depth: int,
+        self,
+        node_id: str,
+        path: list[str],
+        visited: set[str],
+        max_depth: int,
+        depth: int,
     ):
         if depth > max_depth or node_id in visited or node_id not in self.G:
             return

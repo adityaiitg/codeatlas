@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -44,8 +43,12 @@ class GraphBuilder:
         # Delete from FTS & vectors
         if chunk_ids:
             placeholders = ",".join("?" * len(chunk_ids))
-            self.conn.execute(f"DELETE FROM chunks_fts WHERE chunk_id IN ({placeholders})", chunk_ids)
-            self.conn.execute(f"DELETE FROM chunk_vectors WHERE chunk_id IN ({placeholders})", chunk_ids)
+            self.conn.execute(
+                f"DELETE FROM chunks_fts WHERE chunk_id IN ({placeholders})", chunk_ids
+            )
+            self.conn.execute(
+                f"DELETE FROM chunk_vectors WHERE chunk_id IN ({placeholders})", chunk_ids
+            )
 
         self.conn.execute("DELETE FROM symbols WHERE file_path = ?", (file_path,))
         self.conn.execute("DELETE FROM chunks WHERE file_path = ?", (file_path,))

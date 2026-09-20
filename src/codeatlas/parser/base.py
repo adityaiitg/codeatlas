@@ -14,8 +14,6 @@ class LanguageParser(ABC):
     """Base class for language-specific AST parsers."""
 
     @abstractmethod
-    def parse_file(
-        self, file_path: Path
-    ) -> tuple[list[Symbol], list[CodeChunk], list[Edge]]:
+    def parse_file(self, file_path: Path) -> tuple[list[Symbol], list[CodeChunk], list[Edge]]:
         """Parse a source file and extract symbols, chunks, and edges."""
         ...

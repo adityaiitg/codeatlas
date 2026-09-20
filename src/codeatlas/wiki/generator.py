@@ -103,7 +103,9 @@ class WikiGenerator:
             mermaid_lines.append(f"    {src} --> {tgt}")
 
         mermaid_lines.append("```")
-        diagram_block = "\n".join(mermaid_lines) if dep_edges else "_No cross-file relations detected._"
+        diagram_block = (
+            "\n".join(mermaid_lines) if dep_edges else "_No cross-file relations detected._"
+        )
 
         content = f"""# System Architecture
 
@@ -134,14 +136,16 @@ This living architectural specification is automatically generated from the AST 
         stem = Path(file_path).stem
         mod_file = modules_dir / f"{stem}.md"
 
-        file_doc = next((s["docstring"] for s in syms if s["kind"] == "module" and s["docstring"]), "")
+        file_doc = next(
+            (s["docstring"] for s in syms if s["kind"] == "module" and s["docstring"]), ""
+        )
 
         content = f"""# Module: `{Path(file_path).name}`
 
 **Source Location:** `{file_path}`
 
 ## Description
-{file_doc or 'Source implementation module.'}
+{file_doc or "Source implementation module."}
 
 ## Defined Classes & Functions
 """

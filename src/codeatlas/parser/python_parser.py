@@ -36,9 +36,7 @@ class PythonParser(LanguageParser):
         except Exception:
             self._tree_sitter_available = False
 
-    def parse_file(
-        self, file_path: Path
-    ) -> tuple[list[Symbol], list[CodeChunk], list[Edge]]:
+    def parse_file(self, file_path: Path) -> tuple[list[Symbol], list[CodeChunk], list[Edge]]:
         """Parse a Python source file and extract symbols, chunks, and edges."""
         try:
             code = file_path.read_text(encoding="utf-8")
@@ -204,7 +202,9 @@ class PythonParser(LanguageParser):
                         chunk_id=f"chunk:{class_node_id}",
                         symbol_id=class_node_id,
                         file_path=str(file_path),
-                        chunk_type=ChunkType.TEST if "test" in str(file_path).lower() else ChunkType.CODE,
+                        chunk_type=ChunkType.TEST
+                        if "test" in str(file_path).lower()
+                        else ChunkType.CODE,
                         content=class_src,
                         start_line=start,
                         end_line=end,
@@ -308,7 +308,8 @@ class PythonParser(LanguageParser):
                 if self.current_class:
                     id_tokens.extend(split_identifier(self.current_class))
                 chunk_type = (
-                    ChunkType.TEST if "test" in str(file_path).lower() or node.name.startswith("test_")
+                    ChunkType.TEST
+                    if "test" in str(file_path).lower() or node.name.startswith("test_")
                     else ChunkType.CODE
                 )
 
@@ -324,7 +325,8 @@ class PythonParser(LanguageParser):
                         language="python",
                         content_hash=fn_hash,
                         is_definition=True,
-                        identifiers=[node.name] + ([self.current_class] if self.current_class else []),
+                        identifiers=[node.name]
+                        + ([self.current_class] if self.current_class else []),
                         identifier_tokens=list(set(id_tokens)),
                     )
                 )
