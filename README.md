@@ -1,6 +1,6 @@
 # CodeAtlas
 
-Local codebase intelligence engine: AST-driven code IR, deterministic knowledge graph, living repo wiki, and hybrid search via MCP.
+Local codebase intelligence engine: AST-driven code IR, deterministic knowledge graph, living repo wiki, and hybrid search CLI.
 
 ## Features
 
@@ -9,11 +9,14 @@ Local codebase intelligence engine: AST-driven code IR, deterministic knowledge 
 - **Hybrid Search Engine**: Reciprocal Rank Fusion (RRF) combining SQLite FTS5 (BM25 lexical search) and dense vector embeddings (`fastembed`).
 - **Graph Neighborhood Expansion**: Expands search retrieval with 1–2 hop dependency context.
 - **Living Repo Wiki**: Automatically generates and maintains architecture and module documentation with Mermaid diagrams.
-- **Model Context Protocol (MCP)**: Exposes search and graph tools directly to AI coding agents (Claude, Cursor, Antigravity).
-- **Interactive CLI**: Fast terminal commands for indexing, querying, graph visualization, and impact analysis.
+- **Interactive CLI**: Fast terminal commands for indexing, querying, graph visualization, impact analysis, and wiki browsing.
 
 ## Installation
 
+```bash
+pip install codeatlas-cli
+```
+Or for local development:
 ```bash
 uv pip install -e ".[dev]"
 ```

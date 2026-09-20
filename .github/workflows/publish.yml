@@ -1,0 +1,65 @@
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Target registry"
+        required: true
+        default: "pypi"
+        type: choice
+        options:
+          - pypi
+          - testpypi
+
+jobs:
+  build:
+    name: Build source distribution and wheel
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Store distribution packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+  publish:
+    name: Publish to PyPI
+    needs: [build]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ (inputs.target == 'testpypi') && 'testpypi' || 'pypi' }}
+      url: ${{ (inputs.target == 'testpypi') && 'https://test.pypi.org/p/codeatlas-cli' || 'https://pypi.org/p/codeatlas-cli' }}
+    permissions:
+      id-token: write # Required for PyPI Trusted Publishing (OIDC)
+    steps:
+      - name: Download distribution packages
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Publish to PyPI / TestPyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ (inputs.target == 'testpypi') && 'https://test.pypi.org/legacy/' || '' }}
+          password: ${{ (inputs.target == 'testpypi') && secrets.TEST_PYPI_API_TOKEN || secrets.PYPI_API_TOKEN }}
