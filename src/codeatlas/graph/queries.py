@@ -6,26 +6,33 @@ from pathlib import Path
 
 import networkx as nx
 
-from codeatlas.graph.schema import connect_db
+from codeatlas.graph.schema import get_db_connection
 from codeatlas.models.relationships import EdgeType
 
 
 class GraphQueries:
-    """In-memory graph backed by NetworkX, loaded from SQLite."""
+    """Graph query algorithms for neighborhood expansion and impact analysis."""
 
     def __init__(self, db_path: Path | str):
-        self.G = nx.DiGraph()
-        self._load_from_sqlite(Path(db_path))
+        self.db_path = Path(db_path)
+        self._G: nx.DiGraph | None = None
+
+    @property
+    def G(self) -> nx.DiGraph:
+        """Lazily load the NetworkX graph on first access."""
+        if self._G is None:
+            self._G = nx.DiGraph()
+            self._load_from_sqlite(self.db_path)
+        return self._G
 
     def _load_from_sqlite(self, db_path: Path):
         """Load the graph from the SQLite edges table."""
         if not db_path.exists():
             return
-        conn = connect_db(db_path)
-        rows = conn.execute("SELECT source_id, target_id, edge_type FROM edges").fetchall()
+        with get_db_connection(db_path) as conn:
+            rows = conn.execute("SELECT source_id, target_id, edge_type FROM edges").fetchall()
         for source, target, etype in rows:
             self.G.add_edge(source, target, type=etype)
-        conn.close()
 
     def expand_neighborhood(
         self,
@@ -34,6 +41,13 @@ class GraphQueries:
         edge_types: list[EdgeType] | None = None,
     ) -> list[str]:
         """1-hop or 2-hop graph expansion from initial retrieval results."""
+        if not node_ids:
+            return []
+
+        # Fast path: if NetworkX graph not yet loaded and depth == 1, query indexed SQLite edges
+        if self._G is None and depth == 1 and self.db_path.exists():
+            return self._expand_neighborhood_sql(node_ids, edge_types)
+
         type_set = {e.value for e in edge_types} if edge_types else None
         expanded = set(node_ids)
         frontier = set(node_ids)
@@ -55,6 +69,36 @@ class GraphQueries:
             expanded |= frontier
 
         return list(expanded)
+
+    def _expand_neighborhood_sql(
+        self, node_ids: list[str], edge_types: list[EdgeType] | None = None
+    ) -> list[str]:
+        """Fast indexed 1-hop expansion directly against SQLite without loading full graph."""
+        placeholders = ",".join("?" * len(node_ids))
+        type_filter = ""
+        params: list[str] = list(node_ids)
+        if edge_types:
+            type_placeholders = ",".join("?" * len(edge_types))
+            type_filter = f" AND edge_type IN ({type_placeholders})"
+            type_vals = [e.value for e in edge_types]
+        else:
+            type_vals = []
+
+        query = f"""
+            SELECT target_id FROM edges WHERE source_id IN ({placeholders}){type_filter}
+            UNION
+            SELECT source_id FROM edges WHERE target_id IN ({placeholders}){type_filter}
+        """
+        all_params = params + type_vals + params + type_vals
+        try:
+            with get_db_connection(self.db_path) as conn:
+                rows = conn.execute(query, all_params).fetchall()
+            neighbors = {r[0] for r in rows}
+            neighbors.update(node_ids)
+            return list(neighbors)
+        except Exception:
+            # Fall back to NetworkX traversal if any SQL error occurs
+            return self.expand_neighborhood(node_ids, depth=1, edge_types=edge_types)
 
     def impact_analysis(self, node_id: str) -> dict:
         """What would break if this symbol changes?

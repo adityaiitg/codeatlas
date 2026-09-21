@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
+from types import TracebackType
 
 import numpy as np
 
-from codeatlas.graph.schema import SCHEMA_SQL, connect_db
+from codeatlas.graph.schema import SCHEMA_SQL, connect_db, has_vec_table, init_vec_table
 from codeatlas.models.chunks import CodeChunk
 from codeatlas.models.relationships import Edge
 from codeatlas.models.symbols import Symbol
+
+logger = logging.getLogger(__name__)
 
 
 class GraphBuilder:
@@ -21,6 +25,18 @@ class GraphBuilder:
         self.db_path = db_path
         self.conn = connect_db(db_path)
         self.conn.executescript(SCHEMA_SQL)
+        self._has_vec = init_vec_table(self.conn) or has_vec_table(self.conn)
+
+    def __enter__(self) -> GraphBuilder:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.close()
 
     def remove_file(self, file_path: str):
         """Remove all symbols, edges, chunks, and FTS5 records for a specific file."""
@@ -49,6 +65,14 @@ class GraphBuilder:
             self.conn.execute(
                 f"DELETE FROM chunk_vectors WHERE chunk_id IN ({placeholders})", chunk_ids
             )
+            if self._has_vec:
+                try:
+                    self.conn.execute(
+                        f"DELETE FROM chunk_vectors_vec WHERE chunk_id IN ({placeholders})",
+                        chunk_ids,
+                    )
+                except Exception as exc:
+                    logger.debug("Could not delete from chunk_vectors_vec: %s", exc)
 
         self.conn.execute("DELETE FROM symbols WHERE file_path = ?", (file_path,))
         self.conn.execute("DELETE FROM chunks WHERE file_path = ?", (file_path,))
@@ -132,12 +156,26 @@ class GraphBuilder:
     def add_embeddings(self, chunk_id_vectors: list[tuple[str, np.ndarray]]):
         """Insert dense vector embeddings for chunks."""
         for chunk_id, vec in chunk_id_vectors:
-            vec_bytes = vec.astype(np.float32).tobytes()
+            vec_f32 = vec.astype(np.float32)
+            vec_bytes = vec_f32.tobytes()
             self.conn.execute(
                 """INSERT OR REPLACE INTO chunk_vectors (chunk_id, embedding, dim)
                    VALUES (?, ?, ?)""",
                 (chunk_id, vec_bytes, len(vec)),
             )
+            if self._has_vec:
+                try:
+                    self.conn.execute(
+                        "DELETE FROM chunk_vectors_vec WHERE chunk_id = ?", (chunk_id,)
+                    )
+                    self.conn.execute(
+                        "INSERT INTO chunk_vectors_vec (chunk_id, embedding) VALUES (?, ?)",
+                        (chunk_id, vec_f32),
+                    )
+                except Exception as exc:
+                    logger.debug(
+                        "Failed inserting into chunk_vectors_vec for %s: %s", chunk_id, exc
+                    )
         self.conn.commit()
 
     def update_file_manifest(

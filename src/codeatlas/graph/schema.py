@@ -1,7 +1,10 @@
-"""SQLite schema for the code knowledge graph."""
-
+import logging
 import sqlite3
+from collections.abc import Generator
+from contextlib import contextmanager
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
 -- Symbols table (graph nodes)
@@ -55,7 +58,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5(
     tokenize = 'porter unicode61'
 );
 
--- Dense vector embeddings table
+-- Dense vector embeddings table (portable blob storage)
 CREATE TABLE IF NOT EXISTS chunk_vectors (
     chunk_id     TEXT PRIMARY KEY,
     embedding    BLOB NOT NULL,
@@ -92,4 +95,53 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode = MEMORY;")
     conn.execute("PRAGMA busy_timeout = 5000;")
     conn.execute("PRAGMA synchronous = NORMAL;")
+
+    # Attempt to load sqlite-vec extension for native vector acceleration
+    try:
+        import sqlite_vec
+
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+    except Exception as exc:
+        logger.debug("sqlite-vec extension not loaded: %s", exc)
+
     return conn
+
+
+@contextmanager
+def get_db_connection(db_path: Path) -> Generator[sqlite3.Connection, None, None]:
+    """Context manager for SQLite connections that guarantees closing."""
+    conn = connect_db(db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def init_vec_table(conn: sqlite3.Connection, dim: int = 384) -> bool:
+    """Attempt to initialize sqlite-vec vec0 virtual table for native ANN search."""
+    try:
+        conn.execute(
+            f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS chunk_vectors_vec USING vec0(
+                chunk_id TEXT PRIMARY KEY,
+                embedding FLOAT[{dim}] DISTANCE_METRIC=cosine
+            );
+            """
+        )
+        return True
+    except Exception as exc:
+        logger.debug("Could not create vec0 virtual table: %s", exc)
+        return False
+
+
+def has_vec_table(conn: sqlite3.Connection) -> bool:
+    """Check if the chunk_vectors_vec virtual table is available."""
+    try:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='chunk_vectors_vec'"
+        ).fetchone()
+        return row is not None
+    except Exception:
+        return False

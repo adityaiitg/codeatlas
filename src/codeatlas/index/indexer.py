@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from pathlib import Path
+from types import TracebackType
 
 from codeatlas.config import Settings
 from codeatlas.graph.builder import GraphBuilder
@@ -25,6 +26,17 @@ class Indexer:
         self.graph_builder = GraphBuilder(settings.db_path)
         self.python_parser = PythonParser()
         self.embedder = Embedder(model_name=settings.embedding_model) if embed_vectors else None
+
+    def __enter__(self) -> Indexer:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        self.close()
 
     def index_repository(self, force: bool = False) -> dict:
         """Scan and index all files in the repository."""

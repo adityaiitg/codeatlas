@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.logging import RichHandler
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -21,12 +23,24 @@ from codeatlas.retrieval.retriever import Retriever
 from codeatlas.wiki.generator import WikiGenerator
 
 __version__ = pkg_version("codeatlas-cli")
+console = Console()
 
 
 def _version_callback(value: bool) -> None:
     if value:
         typer.echo(f"codeatlas {__version__}")
         raise typer.Exit()
+
+
+def _configure_logging(verbose: bool, quiet: bool) -> None:
+    level = logging.WARNING if quiet else (logging.DEBUG if verbose else logging.INFO)
+    logging.basicConfig(
+        level=level,
+        format="%(message)s",
+        datefmt="[%X]",
+        handlers=[RichHandler(console=console, rich_tracebacks=True, show_path=False)],
+        force=True,
+    )
 
 
 app = typer.Typer(
@@ -47,11 +61,21 @@ def main(
         callback=_version_callback,
         is_eager=True,
     ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Enable detailed debug logging.",
+    ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        "-q",
+        help="Suppress all logs except warnings and errors.",
+    ),
 ) -> None:
     """CodeAtlas: Local codebase intelligence, knowledge graph, living wiki & hybrid search."""
-
-
-console = Console()
+    _configure_logging(verbose=verbose, quiet=quiet)
 
 
 def get_settings(repo_path: Path | None = None) -> Settings:
@@ -72,11 +96,8 @@ def index(
     console.print(f"[bold blue]Indexing repository:[/bold blue] {settings.repo_path}")
 
     with console.status("[cyan]Scanning, parsing AST, and building graph...[/cyan]"):
-        indexer = Indexer(settings, embed_vectors=not no_vectors)
-        try:
+        with Indexer(settings, embed_vectors=not no_vectors) as indexer:
             stats = indexer.index_repository(force=force)
-        finally:
-            indexer.close()
 
     table = Table(title="CodeAtlas Indexing Summary", show_header=True, header_style="bold magenta")
     table.add_column("Metric", style="cyan")
@@ -114,8 +135,8 @@ def search(
         console.print("Run [bold cyan]codeatlas index[/bold cyan] first.")
         raise typer.Exit(code=1)
 
-    retriever = Retriever(settings)
-    results = retriever.search(query=query, limit=limit, mode=mode, expand_graph=expand)
+    with Retriever(settings) as retriever:
+        results = retriever.search(query=query, limit=limit, mode=mode, expand_graph=expand)
 
     if not results:
         console.print(f"[yellow]No results found for query:[/yellow] '{query}'")
@@ -338,9 +359,8 @@ def status(
     if db_exists:
         from codeatlas.graph.builder import GraphBuilder
 
-        gb = GraphBuilder(settings.db_path)
-        stats = gb.get_stats()
-        gb.close()
+        with GraphBuilder(settings.db_path) as gb:
+            stats = gb.get_stats()
         table.add_row("Indexed Files", str(stats.get("files", 0)))
         table.add_row("Indexed Symbols", str(stats.get("symbols", 0)))
         table.add_row("Graph Edges", str(stats.get("edges", 0)))

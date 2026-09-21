@@ -9,7 +9,7 @@ from pathlib import Path
 
 from codeatlas.config import Settings
 from codeatlas.graph.builder import GraphBuilder
-from codeatlas.graph.schema import connect_db
+from codeatlas.graph.schema import get_db_connection
 from codeatlas.llm.client import LLMClient
 from codeatlas.models.chunks import ChunkType, CodeChunk
 
@@ -34,21 +34,20 @@ class WikiGenerator:
         modules_dir = self.wiki_dir / "modules"
         modules_dir.mkdir(parents=True, exist_ok=True)
 
-        conn = connect_db(self.db_path)
-        conn.row_factory = sqlite3.Row
+        with get_db_connection(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
 
-        # Load symbols
-        symbols_rows = conn.execute(
-            """SELECT node_id, file_path, kind, name, parent_id, signature, docstring,
-                      start_line, end_line
-               FROM symbols ORDER BY file_path, start_line"""
-        ).fetchall()
+            # Load symbols
+            symbols_rows = conn.execute(
+                """SELECT node_id, file_path, kind, name, parent_id, signature, docstring,
+                          start_line, end_line
+                   FROM symbols ORDER BY file_path, start_line"""
+            ).fetchall()
 
-        # Load edges
-        edges_rows = conn.execute(
-            """SELECT source_id, target_id, edge_type, metadata FROM edges"""
-        ).fetchall()
-        conn.close()
+            # Load edges
+            edges_rows = conn.execute(
+                """SELECT source_id, target_id, edge_type, metadata FROM edges"""
+            ).fetchall()
 
         # Organize by file / module
         files_map = defaultdict(list)
@@ -232,7 +231,6 @@ Welcome to the automated living documentation for this repository.
 
     def _index_wiki_chunks(self, wiki_files: list[Path]):
         """Index generated wiki pages into CodeAtlas search index."""
-        builder = GraphBuilder(self.db_path)
         wiki_chunks: list[CodeChunk] = []
 
         for p in wiki_files:
@@ -261,5 +259,5 @@ Welcome to the automated living documentation for this repository.
                 )
             )
 
-        builder.add_chunks(wiki_chunks)
-        builder.close()
+        with GraphBuilder(self.db_path) as builder:
+            builder.add_chunks(wiki_chunks)
