@@ -25,7 +25,7 @@ class GraphBuilder:
         self.db_path = db_path
         self.conn = connect_db(db_path)
         self.conn.executescript(SCHEMA_SQL)
-        self._has_vec = init_vec_table(self.conn) or has_vec_table(self.conn)
+        self._has_vec = has_vec_table(self.conn)
 
     def __enter__(self) -> GraphBuilder:
         return self
@@ -155,6 +155,13 @@ class GraphBuilder:
 
     def add_embeddings(self, chunk_id_vectors: list[tuple[str, np.ndarray]]):
         """Insert dense vector embeddings for chunks."""
+        if not chunk_id_vectors:
+            return
+
+        if not self._has_vec:
+            dim = len(chunk_id_vectors[0][1])
+            self._has_vec = init_vec_table(self.conn, dim=dim) or has_vec_table(self.conn)
+
         for chunk_id, vec in chunk_id_vectors:
             vec_f32 = vec.astype(np.float32)
             vec_bytes = vec_f32.tobytes()

@@ -199,7 +199,15 @@ class PythonParser(LanguageParser):
                         )
                     )
 
-                # Class chunk
+                # Class chunk (for search: if class is large, index class header + docstring + overview up to 40 lines;
+                # methods have their own individual chunks)
+                if end - start > 40:
+                    class_chunk_src = "".join(lines[start - 1 : min(start + 40, end)])
+                    class_chunk_end = min(start + 40, end)
+                else:
+                    class_chunk_src = class_src
+                    class_chunk_end = end
+
                 id_tokens = split_identifier(node.name)
                 chunks.append(
                     CodeChunk(
@@ -209,11 +217,11 @@ class PythonParser(LanguageParser):
                         chunk_type=ChunkType.TEST
                         if "test" in str(file_path).lower()
                         else ChunkType.CODE,
-                        content=class_src,
+                        content=class_chunk_src,
                         start_line=start,
-                        end_line=end,
+                        end_line=class_chunk_end,
                         language="python",
-                        content_hash=class_hash,
+                        content_hash=hashlib.sha256(class_chunk_src.encode()).hexdigest(),
                         is_definition=True,
                         identifiers=[node.name],
                         identifier_tokens=id_tokens,

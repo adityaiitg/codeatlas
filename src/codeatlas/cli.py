@@ -85,10 +85,17 @@ def main(
     _configure_logging(verbose=verbose, quiet=quiet)
 
 
-def get_settings(repo_path: Path | None = None) -> Settings:
+def get_settings(repo_path: Path | None = None, fast: bool = False) -> Settings:
     """Instantiate settings for the given repository path."""
     target_path = (repo_path or Path(".")).resolve()
     data_dir = target_path / ".codeatlas"
+    if fast:
+        return Settings(
+            repo_path=target_path,
+            data_dir=data_dir,
+            embedding_model="minishlab/potion-code-16M-v2",
+            embedding_dim=256,
+        )
     return Settings(repo_path=target_path, data_dir=data_dir)
 
 
@@ -97,10 +104,14 @@ def index(
     path: Path = typer.Argument(Path("."), help="Path to repository to index"),
     force: bool = typer.Option(False, "--force", "-f", help="Force full re-indexing of all files"),
     no_vectors: bool = typer.Option(False, "--no-vectors", help="Skip dense vector embeddings"),
+    fast: bool = typer.Option(
+        False, "--fast", help="Use ultra-fast static Model2Vec embeddings instead of transformer"
+    ),
 ):
     """Scan, parse AST, construct code graph, and index repository."""
-    settings = get_settings(path)
-    console.print(f"[bold blue]Indexing repository:[/bold blue] {settings.repo_path}")
+    settings = get_settings(path, fast=fast)
+    mode_desc = " (Fast Model2Vec)" if fast else ""
+    console.print(f"[bold blue]Indexing repository{mode_desc}:[/bold blue] {settings.repo_path}")
 
     with console.status("[cyan]Scanning, parsing AST, and building graph...[/cyan]"):
         with Indexer(settings, embed_vectors=not no_vectors) as indexer:
@@ -474,6 +485,55 @@ def mcp(
 
     server = MCPServer(repo_path=path)
     server.run()
+
+
+@app.command()
+def install(
+    target: str = typer.Option(
+        "all", "--target", "-t", help="Target agent: claude, cursor, opencode, codex, or all"
+    ),
+):
+    """Auto-configure CodeAtlas MCP server in installed coding agents (Claude Code, Cursor, etc.)."""
+    from codeatlas.installer.agent_installer import install_all
+
+    agents = None if target == "all" else [target]
+    results = install_all(agents)
+
+    table = Table(title="CodeAtlas Agent MCP Installation", show_header=True, header_style="bold cyan")
+    table.add_column("Agent", style="cyan")
+    table.add_column("Configuration File", style="dim")
+    table.add_column("Status", style="green")
+
+    for r in results:
+        status_color = "green" if r.action == "configured" else ("yellow" if r.action == "already_present" else "red")
+        table.add_row(r.agent.capitalize(), str(r.config_path), f"[{status_color}]{r.action}[/{status_color}]")
+
+    console.print(table)
+    console.print("[bold green]✓ Agent configuration updated![/bold green]\n")
+
+
+@app.command()
+def uninstall(
+    target: str = typer.Option(
+        "all", "--target", "-t", help="Target agent: claude, cursor, opencode, codex, or all"
+    ),
+):
+    """Remove CodeAtlas MCP server from coding agent configurations."""
+    from codeatlas.installer.agent_installer import uninstall_all
+
+    agents = None if target == "all" else [target]
+    results = uninstall_all(agents)
+
+    table = Table(title="CodeAtlas Agent MCP Removal", show_header=True, header_style="bold yellow")
+    table.add_column("Agent", style="cyan")
+    table.add_column("Configuration File", style="dim")
+    table.add_column("Status", style="yellow")
+
+    for r in results:
+        table.add_row(r.agent.capitalize(), str(r.config_path), r.action)
+
+    console.print(table)
+    console.print("[bold yellow]✓ Agent configuration cleaned up![/bold yellow]\n")
 
 
 if __name__ == "__main__":

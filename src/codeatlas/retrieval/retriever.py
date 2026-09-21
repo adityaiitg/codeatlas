@@ -4,6 +4,7 @@ import logging
 import re
 import sqlite3
 from dataclasses import dataclass, field
+from pathlib import Path
 from types import TracebackType
 
 import numpy as np
@@ -14,6 +15,12 @@ from codeatlas.graph.schema import get_db_connection, has_vec_table
 from codeatlas.index.embedder import Embedder
 
 logger = logging.getLogger(__name__)
+
+TEST_PATH_RE = re.compile(
+    r"(?:^|[\\/])(?:tests?|__tests__|spec|testing)(?:[\\/]|$)|"
+    r"test_[^\\/]*\.\w+$|[^\\/]*_test\.\w+$|[^\\/]*Tests?\.\w+$|[^\\/]*_spec\.\w+$"
+)
+COMPAT_PATH_RE = re.compile(r"(?:^|[\\/])(?:compat|_compat|legacy)(?:[\\/]|$)")
 
 
 @dataclass
@@ -66,8 +73,8 @@ class Retriever:
         word_count = len(q.split())
 
         if has_identifier_syntax or word_count <= 2:
-            # Code/symbol lookup: prioritize lexical matching
-            return (0.7, 0.3)
+            # Code/symbol lookup: prioritize lexical matching while retaining semantic signal
+            return (0.6, 0.4)
         # Conceptual / question: prioritize dense semantic vectors
         return (0.3, 0.7)
 
@@ -238,6 +245,27 @@ class Retriever:
             if chunk_data["is_definition"]:
                 rrf_score *= 1.25
 
+            # Code-aware boosts:
+            clean_q = query.strip().lower()
+            sym_id = (chunk_data.get("symbol_id") or "").split(":")[-1].lower()
+            if sym_id and (sym_id == clean_q or sym_id.endswith(f".{clean_q}")):
+                rrf_score *= 2.0
+
+            file_stem = Path(chunk_data["file_path"]).stem.lower()
+            if file_stem and (clean_q == file_stem or clean_q.rstrip("s") == file_stem.rstrip("s")):
+                rrf_score *= 1.4
+            elif any(w == file_stem for w in clean_q.split() if len(w) > 2):
+                rrf_score *= 1.2
+
+            # Noise penalties: down-rank test files and compat directories unless query asks for tests
+            fpath = chunk_data["file_path"]
+            is_test_query = "test" in clean_q or "spec" in clean_q
+            if not is_test_query:
+                if TEST_PATH_RE.search(fpath):
+                    rrf_score *= 0.35
+                elif COMPAT_PATH_RE.search(fpath):
+                    rrf_score *= 0.5
+
             res = SearchResult(
                 chunk_id=cid,
                 symbol_id=chunk_data["symbol_id"],
@@ -252,6 +280,22 @@ class Retriever:
                 semantic_rank=sem_ranks.get(cid),
             )
             scored_chunks.append(res)
+
+        # File coherence boost: promote primary chunks of files with multiple strong matches
+        if scored_chunks:
+            max_score = max(c.score for c in scored_chunks)
+            if max_score > 0:
+                file_scores: dict[str, float] = {}
+                best_chunk_per_file: dict[str, SearchResult] = {}
+                for c in scored_chunks:
+                    file_scores[c.file_path] = file_scores.get(c.file_path, 0.0) + c.score
+                    if c.file_path not in best_chunk_per_file or c.score > best_chunk_per_file[c.file_path].score:
+                        best_chunk_per_file[c.file_path] = c
+
+                max_file_score = max(file_scores.values())
+                coherence_unit = max_score * 0.2
+                for fpath_key, best_chunk in best_chunk_per_file.items():
+                    best_chunk.score += coherence_unit * (file_scores[fpath_key] / max_file_score)
 
         scored_chunks.sort(key=lambda x: x.score, reverse=True)
         top_results = scored_chunks[:limit]

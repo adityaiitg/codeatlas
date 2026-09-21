@@ -1,4 +1,4 @@
-.PHONY: help install test lint format clean index export bench
+.PHONY: help install test lint format clean index export bench bench-compare
 
 help:
 	@echo "Available commands:"
@@ -25,6 +25,9 @@ format:
 
 bench:
 	python benchmarks/benchmark_suite.py
+
+bench-compare:
+	python benchmarks/compare_semble.py
 
 clean:
 	rm -rf build/ dist/ *.egg-info/ .pytest_cache/ .codeatlas/

@@ -39,3 +39,6 @@ htmlcov/
 # uv
 uv.lock
 
+# Benchmarks output
+benchmarks/results/
+
