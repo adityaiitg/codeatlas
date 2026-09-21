@@ -9,7 +9,8 @@
 [![Benchmark NDCG@10](https://img.shields.io/badge/NDCG%4010-0.8978%20(beats%20Semble)-brightgreen.svg)]()
 [![Rust Port](https://img.shields.io/badge/Rust%20Port-codeatlas--rs-orange.svg)](https://github.com/adityaiitg/codeatlas-rs)
 
-> ⚡ **Looking for maximum performance? Check out [CodeAtlas-rs (Rust)](https://github.com/adityaiitg/codeatlas-rs)** — our native Rust rewrite featuring **107ms cold indexing**, **6ms incremental updates**, **<1ms search latency**, and a single 6MB standalone binary.
+> ⚡ **Looking for maximum performance? Check out [CodeAtlas-rs (Rust)](https://github.com/adityaiitg/codeatlas-rs)** — our native Rust rewrite featuring **107ms cold indexing**, **6ms incremental updates**, **<1ms search latency**, and a single 6MB standalone binary.  
+> 📖 **Comprehensive Documentation:** For in-depth CLI workflows, Model2Vec CPU modes, Python SDK examples, and MCP configs, see the [Full Usage Guide](docs/USAGE.md).
 
 ---
 
