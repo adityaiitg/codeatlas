@@ -39,9 +39,16 @@ class FileScanner:
         return results
 
     def _is_ignored(self, path: Path) -> bool:
-        """Check if a path matches any ignore pattern."""
-        parts = path.relative_to(self.settings.repo_path).parts
+        """Check if a path matches any ignore pattern or is a hidden/AppleDouble file."""
+        if path.name.startswith("."):
+            return True
+        try:
+            parts = path.relative_to(self.settings.repo_path).parts
+        except ValueError:
+            parts = path.parts
         for part in parts:
+            if part.startswith(".") and part != ".":
+                return True
             for pattern in self.settings.ignore_patterns:
                 if pattern.startswith("*"):
                     if part.endswith(pattern[1:]):
