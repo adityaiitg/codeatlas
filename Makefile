@@ -1,4 +1,4 @@
-.PHONY: help install test lint format clean index export
+.PHONY: help install test lint format clean index export bench
 
 help:
 	@echo "Available commands:"
@@ -6,6 +6,7 @@ help:
 	@echo "  make test     - Run pytest test suite"
 	@echo "  make lint     - Run ruff linter checks"
 	@echo "  make format   - Run ruff code formatter"
+	@echo "  make bench    - Run CodeAtlas performance benchmark suite"
 	@echo "  make clean    - Remove build artifacts and temporary files"
 	@echo "  make index    - Index the current repository with CodeAtlas"
 
@@ -16,11 +17,14 @@ test:
 	pytest tests/ -v
 
 lint:
-	ruff check src/ tests/
+	ruff check src/ tests/ benchmarks/
 
 format:
-	ruff format src/ tests/
-	ruff check --fix src/ tests/
+	ruff format src/ tests/ benchmarks/
+	ruff check --fix src/ tests/ benchmarks/
+
+bench:
+	python benchmarks/benchmark_suite.py
 
 clean:
 	rm -rf build/ dist/ *.egg-info/ .pytest_cache/ .codeatlas/
