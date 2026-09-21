@@ -3,6 +3,7 @@
 **Local codebase intelligence engine: multi-language code IR, deterministic knowledge graph, living repo wiki, multi-signal hybrid search, and Model Context Protocol (MCP) server for AI coding agents.**
 
 [![PyPI version](https://img.shields.io/pypi/v/codeatlas-cli.svg)](https://pypi.org/project/codeatlas-cli/)
+[![Crates.io](https://img.shields.io/crates/v/codeatlas.svg?label=crates.io%20(Rust))](https://crates.io/crates/codeatlas)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Benchmark NDCG@10](https://img.shields.io/badge/NDCG%4010-0.8978%20(beats%20Semble)-brightgreen.svg)]()
