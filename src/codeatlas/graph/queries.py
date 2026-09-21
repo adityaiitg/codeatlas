@@ -57,15 +57,45 @@ class GraphQueries:
         return list(expanded)
 
     def impact_analysis(self, node_id: str) -> dict:
-        """What would break if this symbol changes?"""
+        """What would break if this symbol changes?
+
+        Walks the dependency graph to find all affected nodes:
+        - Callers (predecessors via CALLS edges) — code that invokes this symbol
+        - Defined children (successors via DEFINES edges) — methods/functions owned by this symbol
+        """
         if node_id not in self.G:
             return {"direct_dependents": [], "all_affected": [], "affected_count": 0}
 
-        direct = list(self.G.successors(node_id))
-        all_affected = list(nx.descendants(self.G, node_id))
+        direct: list[str] = []
+        # Callers: anything that calls this symbol would be affected
+        for src, _, d in self.G.in_edges(node_id, data=True):
+            if d.get("type") == EdgeType.CALLS.value:
+                direct.append(src)
+        # Defined children: methods/classes defined by this symbol would be affected
+        for _, tgt, d in self.G.edges(node_id, data=True):
+            if d.get("type") == EdgeType.DEFINES.value:
+                direct.append(tgt)
+
+        # BFS to find all transitively affected nodes
+        all_affected: set[str] = set()
+        frontier = set(direct)
+        while frontier:
+            all_affected |= frontier
+            next_frontier: set[str] = set()
+            for nid in frontier:
+                if nid not in self.G:
+                    continue
+                for src, _, d in self.G.in_edges(nid, data=True):
+                    if d.get("type") == EdgeType.CALLS.value and src not in all_affected:
+                        next_frontier.add(src)
+                for _, tgt, d in self.G.edges(nid, data=True):
+                    if d.get("type") == EdgeType.DEFINES.value and tgt not in all_affected:
+                        next_frontier.add(tgt)
+            frontier = next_frontier
+
         return {
             "direct_dependents": direct,
-            "all_affected": all_affected,
+            "all_affected": list(all_affected),
             "affected_count": len(all_affected),
         }
 

@@ -21,7 +21,11 @@ class GitTracker:
 
             self._repo = git.Repo(repo_path, search_parent_directories=True)
             self._is_git = True
-        except Exception:
+        except ImportError:
+            logger.debug("GitPython not installed, git features disabled")
+            self._is_git = False
+        except Exception as exc:
+            logger.debug("Not a git repository at %s: %s", repo_path, exc)
             self._is_git = False
 
     @property

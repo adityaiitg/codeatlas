@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from importlib.metadata import version as pkg_version
 from pathlib import Path
 
 import typer
@@ -19,11 +20,37 @@ from codeatlas.index.indexer import Indexer
 from codeatlas.retrieval.retriever import Retriever
 from codeatlas.wiki.generator import WikiGenerator
 
+__version__ = pkg_version("codeatlas-cli")
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"codeatlas {__version__}")
+        raise typer.Exit()
+
+
 app = typer.Typer(
     name="codeatlas",
     help="CodeAtlas: Local codebase intelligence, knowledge graph, living wiki & hybrid search.",
     add_completion=False,
+    callback=lambda version: None,  # placeholder, real callback below
 )
+
+
+@app.callback()
+def main(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        help="Show version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    ),
+) -> None:
+    """CodeAtlas: Local codebase intelligence, knowledge graph, living wiki & hybrid search."""
+
+
 console = Console()
 
 
@@ -261,14 +288,20 @@ def wiki(
             console.print(f"  • {f.relative_to(settings.repo_path)}")
 
     elif action == "view":
-        target_file = settings.wiki_dir / f"{topic}.md"
+        # Sanitize topic to prevent path traversal
+        safe_topic = Path(topic).name
+        target_file = settings.wiki_dir / f"{safe_topic}.md"
         if not target_file.exists():
             # Try in modules
-            target_file = settings.wiki_dir / "modules" / f"{topic}.md"
+            target_file = settings.wiki_dir / "modules" / f"{safe_topic}.md"
+
+        if not target_file.resolve().is_relative_to(settings.wiki_dir.resolve()):
+            console.print("[bold red]Error:[/bold red] Invalid topic name.")
+            raise typer.Exit(code=1)
 
         if not target_file.exists():
             console.print(
-                f"[yellow]Wiki chapter '{topic}' not found in {settings.wiki_dir}[/yellow]"
+                f"[yellow]Wiki chapter '{safe_topic}' not found in {settings.wiki_dir}[/yellow]"
             )
             return
 

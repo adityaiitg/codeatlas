@@ -44,7 +44,8 @@ class Indexer:
             try:
                 content = path.read_bytes()
                 curr_hash = hashlib.sha256(content).hexdigest()
-            except Exception:
+            except OSError as exc:
+                logger.warning("Skipping unreadable file %s: %s", path, exc)
                 continue
 
             if force or manifest.get(path_str) != curr_hash:

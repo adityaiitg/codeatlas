@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
@@ -11,6 +12,8 @@ from codeatlas.graph.builder import GraphBuilder
 from codeatlas.graph.schema import connect_db
 from codeatlas.llm.client import LLMClient
 from codeatlas.models.chunks import ChunkType, CodeChunk
+
+logger = logging.getLogger(__name__)
 
 
 class WikiGenerator:
@@ -235,7 +238,8 @@ Welcome to the automated living documentation for this repository.
         for p in wiki_files:
             try:
                 text = p.read_text(encoding="utf-8")
-            except Exception:
+            except OSError as exc:
+                logger.warning("Cannot read wiki file %s: %s", p, exc)
                 continue
 
             lines = text.splitlines()

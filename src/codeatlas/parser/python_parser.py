@@ -1,9 +1,10 @@
-"""Python AST parser using Tree-sitter with standard AST fallback."""
+"""Python AST parser using standard ast module (Tree-sitter loaded for future multi-language support)."""
 
 from __future__ import annotations
 
 import ast
 import hashlib
+import logging
 import re
 from pathlib import Path
 
@@ -11,6 +12,8 @@ from codeatlas.models.chunks import ChunkType, CodeChunk
 from codeatlas.models.relationships import Edge, EdgeType
 from codeatlas.models.symbols import Symbol, SymbolKind
 from codeatlas.parser.base import LanguageParser
+
+logger = logging.getLogger(__name__)
 
 
 def split_identifier(identifier: str) -> list[str]:
@@ -33,14 +36,15 @@ class PythonParser(LanguageParser):
             self._language = Language(tspython.language())
             self._ts_parser = Parser(self._language)
             self._tree_sitter_available = True
-        except Exception:
+        except ImportError:
             self._tree_sitter_available = False
 
     def parse_file(self, file_path: Path) -> tuple[list[Symbol], list[CodeChunk], list[Edge]]:
         """Parse a Python source file and extract symbols, chunks, and edges."""
         try:
             code = file_path.read_text(encoding="utf-8")
-        except Exception:
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.warning("Cannot read %s: %s", file_path, exc)
             return [], [], []
 
         file_hash = hashlib.sha256(code.encode("utf-8")).hexdigest()
