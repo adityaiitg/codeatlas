@@ -10,7 +10,9 @@ from types import TracebackType
 from codeatlas.config import Settings
 from codeatlas.graph.builder import GraphBuilder
 from codeatlas.index.embedder import Embedder
+from codeatlas.parser.base import LanguageParser
 from codeatlas.parser.file_scanner import FileScanner
+from codeatlas.parser.generic_parser import GenericCodeParser
 from codeatlas.parser.python_parser import PythonParser
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,16 @@ class Indexer:
         self.scanner = FileScanner(settings)
         self.graph_builder = GraphBuilder(settings.db_path)
         self.python_parser = PythonParser()
+        self.parsers: dict[str, LanguageParser] = {
+            "python": self.python_parser,
+            "typescript": GenericCodeParser("typescript"),
+            "javascript": GenericCodeParser("javascript"),
+            "go": GenericCodeParser("go"),
+            "rust": GenericCodeParser("rust"),
+            "java": GenericCodeParser("java"),
+            "c": GenericCodeParser("c"),
+            "cpp": GenericCodeParser("cpp"),
+        }
         self.embedder = Embedder(model_name=settings.embedding_model) if embed_vectors else None
 
     def __enter__(self) -> Indexer:
@@ -75,8 +87,9 @@ class Indexer:
             # Clean previous state for this file
             self.graph_builder.remove_file(path_str)
 
-            if lang == "python":
-                symbols, chunks, edges = self.python_parser.parse_file(path)
+            parser = self.parsers.get(lang)
+            if parser:
+                symbols, chunks, edges = parser.parse_file(path)
                 self.graph_builder.add_symbols(symbols)
                 self.graph_builder.add_edges(edges)
                 self.graph_builder.add_chunks(chunks)

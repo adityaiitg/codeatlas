@@ -22,7 +22,14 @@ from codeatlas.index.indexer import Indexer
 from codeatlas.retrieval.retriever import Retriever
 from codeatlas.wiki.generator import WikiGenerator
 
-__version__ = pkg_version("codeatlas-cli")
+try:
+    __version__ = pkg_version("codeatlas-cli")
+except Exception:
+    try:
+        __version__ = pkg_version("codeatlas")
+    except Exception:
+        __version__ = "0.1.0"
+
 console = Console()
 
 
@@ -288,6 +295,9 @@ def wiki(
     topic: str = typer.Option(
         "index", "--topic", "-t", help="Topic to view (e.g. index, architecture, workflows)"
     ),
+    llm: bool = typer.Option(
+        False, "--llm", help="Use configured LLM for AI-powered chapter summarization"
+    ),
     path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
 ):
     """Generate or view the living repository wiki."""
@@ -300,7 +310,7 @@ def wiki(
 
     if action == "generate":
         with console.status("[cyan]Generating living wiki specifications...[/cyan]"):
-            generator = WikiGenerator(settings)
+            generator = WikiGenerator(settings, use_llm=llm)
             files = generator.generate()
 
         console.print(f"[bold green]✓ Living Wiki generated![/bold green] ({len(files)} chapters)")
@@ -387,6 +397,83 @@ def diff(
     console.print(f"[bold yellow]Found {len(changed)} changed files:[/bold yellow]")
     for f in changed:
         console.print(f"  • {f}")
+
+
+@app.command()
+def export(
+    output: Path = typer.Option(
+        Path("codeatlas_graph.json"), "--output", "-o", help="Output file path"
+    ),
+    format: str = typer.Option("json", "--format", "-f", help="Export format: json, graphml, dot"),
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
+):
+    """Export the codebase knowledge graph to JSON, GraphML, or DOT."""
+    settings = get_settings(path)
+    if not settings.db_path.exists():
+        console.print(
+            "[bold red]Error:[/bold red] Repository not indexed. Run 'codeatlas index' first."
+        )
+        raise typer.Exit(code=1)
+
+    gq = GraphQueries(settings.db_path)
+    try:
+        out = gq.export_graph(output_path=output, format=format)
+        console.print(
+            f"[bold green]✓ Exported knowledge graph to:[/bold green] {out} ({len(gq.G.nodes)} nodes, {len(gq.G.edges)} edges)"
+        )
+    except Exception as exc:
+        console.print(f"[bold red]Export failed:[/bold red] {exc}")
+        raise typer.Exit(code=1) from None
+
+
+@app.command()
+def config(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
+):
+    """View active CodeAtlas settings, paths, and model configurations."""
+    settings = get_settings(path)
+    table = Table(
+        title="CodeAtlas Active Configuration", show_header=True, header_style="bold cyan"
+    )
+    table.add_column("Setting", style="yellow")
+    table.add_column("Value", style="green")
+    table.add_column("Env Variable", style="dim")
+
+    configs = [
+        ("Repository Path", str(settings.repo_path), "CODEATLAS_REPO_PATH"),
+        ("Data Directory", str(settings.data_dir), "CODEATLAS_DATA_DIR"),
+        ("Database Path", str(settings.db_path), "-"),
+        ("Wiki Directory", str(settings.wiki_dir), "-"),
+        ("Embedding Model", settings.embedding_model, "CODEATLAS_EMBEDDING_MODEL"),
+        ("Embedding Dim", str(settings.embedding_dim), "CODEATLAS_EMBEDDING_DIM"),
+        ("LLM Provider", settings.llm_provider, "CODEATLAS_LLM_PROVIDER"),
+        ("LLM Model", settings.llm_model, "CODEATLAS_LLM_MODEL"),
+        ("BM25 Weight", str(settings.bm25_weight), "CODEATLAS_BM25_WEIGHT"),
+        ("Semantic Weight", str(settings.semantic_weight), "CODEATLAS_SEMANTIC_WEIGHT"),
+        ("RRF k", str(settings.rrf_k), "CODEATLAS_RRF_K"),
+        ("Search Limit", str(settings.search_limit), "CODEATLAS_SEARCH_LIMIT"),
+        (
+            "Expansion Depth",
+            str(settings.graph_expansion_depth),
+            "CODEATLAS_GRAPH_EXPANSION_DEPTH",
+        ),
+    ]
+
+    for name, val, env in configs:
+        table.add_row(name, val, env)
+
+    console.print(table)
+
+
+@app.command()
+def mcp(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
+):
+    """Start the Model Context Protocol (MCP) server over standard I/O."""
+    from codeatlas.mcp.server import MCPServer
+
+    server = MCPServer(repo_path=path)
+    server.run()
 
 
 if __name__ == "__main__":

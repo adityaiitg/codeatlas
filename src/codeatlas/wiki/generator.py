@@ -109,10 +109,29 @@ class WikiGenerator:
             "\n".join(mermaid_lines) if dep_edges else "_No cross-file relations detected._"
         )
 
+        overview_text = "This living architectural specification is automatically generated from the AST and Knowledge Graph of the codebase."
+        if self.llm:
+            try:
+                mod_summaries = []
+                for fpath, syms in sorted(files_map.items())[:15]:
+                    names = [s["name"] for s in syms if s["kind"] in ("class", "function")]
+                    mod_summaries.append(f"- {Path(fpath).name}: {', '.join(names[:5])}")
+                prompt = (
+                    "Provide a high-level architectural overview (2-3 paragraphs) of this software system based on its modules:\n"
+                    + "\n".join(mod_summaries)
+                )
+                res = self.llm.complete(
+                    prompt, system_prompt="You are an expert software architect."
+                )
+                if res:
+                    overview_text = f"{res}\n\n_Synthesized with AI architectural analysis._"
+            except Exception as exc:
+                logger.debug("LLM architecture summary failed: %s", exc)
+
         content = f"""# System Architecture
 
 ## Overview
-This living architectural specification is automatically generated from the AST and Knowledge Graph of the codebase.
+{overview_text}
 
 ## Subsystem Dependency Graph
 {diagram_block}
@@ -141,6 +160,23 @@ This living architectural specification is automatically generated from the AST 
         file_doc = next(
             (s["docstring"] for s in syms if s["kind"] == "module" and s["docstring"]), ""
         )
+
+        if not file_doc and self.llm:
+            try:
+                sym_list = [
+                    f"- {s['kind']} {s['name']}" for s in syms if s["kind"] in ("class", "function")
+                ]
+                prompt = (
+                    f"Provide a brief 1-paragraph technical summary for the module '{Path(file_path).name}' which defines:\n"
+                    + "\n".join(sym_list[:10])
+                )
+                res = self.llm.complete(
+                    prompt, system_prompt="You are a technical documentation writer."
+                )
+                if res:
+                    file_doc = res
+            except Exception as exc:
+                logger.debug("LLM module summary failed for %s: %s", file_path, exc)
 
         content = f"""# Module: `{Path(file_path).name}`
 

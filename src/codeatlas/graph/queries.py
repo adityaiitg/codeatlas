@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import networkx as nx
@@ -180,3 +181,30 @@ class GraphQueries:
         path.append(node_id)
         for callee in self.get_callees(node_id):
             self._dfs_calls(callee, path, visited, max_depth, depth + 1)
+
+    def export_graph(self, output_path: Path, format: str = "json") -> Path:
+        """Export the knowledge graph to JSON, GraphML, or DOT format."""
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fmt = format.lower().strip()
+
+        if fmt == "json":
+            data = nx.node_link_data(self.G)
+            output_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        elif fmt in ("graphml", "xml"):
+            nx.write_graphml(self.G, str(output_path))
+        elif fmt in ("dot", "gv"):
+            lines = ["digraph CodeAtlas {", "  rankdir=LR;"]
+            for u, v, d in self.G.edges(data=True):
+                etype = d.get("type", "EDGE")
+                u_esc = str(u).replace('"', '\\"')
+                v_esc = str(v).replace('"', '\\"')
+                lines.append(f'  "{u_esc}" -> "{v_esc}" [label="{etype}"];')
+            lines.append("}\n")
+            output_path.write_text("\n".join(lines), encoding="utf-8")
+        else:
+            raise ValueError(
+                f"Unsupported export format '{format}'. Supported formats: 'json', 'graphml', 'dot'."
+            )
+
+        return output_path

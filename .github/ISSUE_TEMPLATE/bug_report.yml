@@ -1,0 +1,40 @@
+name: Bug Report
+description: Create a report to help us improve CodeAtlas
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue!
+  - type: input
+    id: version
+    attributes:
+      label: CodeAtlas Version
+      description: What version of CodeAtlas are you using? (run `codeatlas --version`)
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Tell us what you were trying to do and what went wrong.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this behavior?
+      placeholder: |
+        1. Run 'codeatlas index .'
+        2. Run 'codeatlas search ...'
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs or Terminal Output
+      description: Please paste any relevant error messages or traceback.
+      render: shell
