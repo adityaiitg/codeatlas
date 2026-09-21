@@ -149,6 +149,29 @@ codeatlas mcp
 
 ---
 
+## 🤖 AI Agent Skill & Editor Integration (CLI Use Case)
+
+If you want your AI assistant (**Antigravity / AGY**, **Cursor**, **GitHub Copilot**, **Claude Code**) to invoke the fast `codeatlas` CLI directly from terminal rather than via MCP:
+
+### One-Command Skill Installation
+```bash
+# Installs globally for Antigravity (AGY) & agent environments (~/.agents/skills):
+./scripts/install-skill.sh
+
+# Or configure a specific project with Cursor rules and Copilot instructions:
+./scripts/install-skill.sh /path/to/project
+```
+
+### Supported Editor & Agent Standards
+| Environment | Configuration / Rule | What It Enables |
+| :--- | :--- | :--- |
+| **Antigravity (AGY)** | `~/.gemini/config/skills/codeatlas/SKILL.md` | AGY automatically executes `codeatlas search` and `codeatlas impact` for code exploration and refactoring. |
+| **Cursor** | `.cursor/rules/codeatlas.mdc` | Teaches Cursor Composer & Agent to run blast-radius analysis before refactoring. |
+| **GitHub Copilot** | `.github/copilot-instructions.md` | Instructs Copilot Workspace and CLI to leverage `codeatlas` for code navigation and dependencies. |
+| **General Agents** | `skills/codeatlas/SKILL.md` | Portable Agent Skill specification following the open skill standard. |
+
+---
+
 ## ⚡ Rust Version (`codeatlas-rs`)
 
 For production environments, CI pipelines, or developers needing instant indexing on large codebases, see the native Rust port:
