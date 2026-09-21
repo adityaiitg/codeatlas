@@ -13,10 +13,26 @@ Local codebase intelligence engine: AST-driven code IR, deterministic knowledge 
 
 ## Installation
 
+### Via Homebrew (macOS / Linux)
+
+```bash
+brew install adityaiitg/tap/codeatlas
+```
+
+Or tap first:
+```bash
+brew tap adityaiitg/tap
+brew install codeatlas
+```
+
+### Via PyPI
+
 ```bash
 pip install codeatlas-cli
 ```
-Or for local development:
+
+### For Local Development
+
 ```bash
 uv pip install -e ".[dev]"
 ```
