@@ -54,6 +54,8 @@ We replicated the standard coding agent retrieval benchmark on the **Flask** ref
   - Stdio JSON-RPC 2.0 server compatible with Claude Code, Cursor, OpenCode, Codex, and Windsurf.
 - **One-Click Agent Auto-Installer**:
   - `codeatlas install all` automatically configures MCP across all detected coding agents.
+- **VS Code & Cursor Extension**:
+  - Full IDE extension available at [codeatlas-vscode](https://github.com/adityaiitg/codeatlas-vscode) featuring hybrid search views, caller impact trees, interactive D3.js knowledge graph, and live CodeLens caller annotations.
 
 ---
 
