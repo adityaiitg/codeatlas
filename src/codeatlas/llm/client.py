@@ -32,7 +32,9 @@ class LLMClient:
                 temperature=0.2,
                 max_tokens=2048,
             )
-            return response.choices[0].message.content
+            if hasattr(response, "choices") and response.choices:
+                return response.choices[0].message.content
+            return None
         except Exception as e:
             logger.debug(f"LLM synthesis unavailable: {e}")
             return None

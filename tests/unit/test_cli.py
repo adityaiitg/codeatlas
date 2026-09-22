@@ -61,22 +61,37 @@ class Calculator:
     assert res_status.exit_code == 0
     assert "Indexed Files" in res_status.stdout
 
-    # 4. Test codeatlas search
+    # 4. Test codeatlas search (text and json)
     res_search = runner.invoke(
         app, ["search", "Calculator", "--path", str(repo), "--mode", "lexical"]
     )
     assert res_search.exit_code == 0
     assert "Calculator" in res_search.stdout
 
+    res_search_json = runner.invoke(
+        app, ["search", "Calculator", "--path", str(repo), "--mode", "lexical", "--json"]
+    )
+    assert res_search_json.exit_code == 0
+    import json
+    data = json.loads(res_search_json.stdout)
+    assert isinstance(data, list)
+    assert len(data) > 0
+    assert "content" in data[0]
+
     # 5. Test codeatlas graph
     res_graph = runner.invoke(app, ["graph", "Calculator", "--path", str(repo)])
     assert res_graph.exit_code == 0
     assert "Calculator" in res_graph.stdout
 
-    # 6. Test codeatlas impact
+    # 6. Test codeatlas impact (text and json)
     res_impact = runner.invoke(app, ["impact", "Calculator", "--path", str(repo)])
     assert res_impact.exit_code == 0
     assert "Blast Radius Assessment" in res_impact.stdout
+
+    res_impact_json = runner.invoke(app, ["impact", "Calculator", "--path", str(repo), "--json"])
+    assert res_impact_json.exit_code == 0
+    impact_data = json.loads(res_impact_json.stdout)
+    assert "affected_count" in impact_data
 
     # 7. Test codeatlas export
     export_json = repo / "graph_out.json"
@@ -97,3 +112,37 @@ class Calculator:
     )
     assert res_wiki_view.exit_code == 0
     assert "System Architecture" in res_wiki_view.stdout
+
+
+def test_cli_watch(tmp_path: Path, monkeypatch):
+    import time
+
+    repo = tmp_path / "watch_repo"
+    repo.mkdir()
+    (repo / "mod.py").write_text("def hello(): pass\n", encoding="utf-8")
+
+    # Mock time.sleep to raise KeyboardInterrupt on first call
+    def mock_sleep(_):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(time, "sleep", mock_sleep)
+
+    res = runner.invoke(app, ["watch", str(repo), "--interval", "1", "--no-vectors"])
+    assert res.exit_code == 0
+    assert "CodeAtlas Watch Mode" in res.stdout
+    assert "Watch mode stopped" in res.stdout
+
+
+def test_cli_hook_commands(tmp_path: Path):
+    import git
+
+    repo = git.Repo.init(tmp_path)
+    res_install = runner.invoke(app, ["hook", "install", "--path", str(tmp_path)])
+    assert res_install.exit_code == 0
+    assert "Installed CodeAtlas git hooks" in res_install.stdout
+
+    res_uninstall = runner.invoke(app, ["hook", "uninstall", "--path", str(tmp_path)])
+    assert res_uninstall.exit_code == 0
+    assert "Removed CodeAtlas git hooks" in res_uninstall.stdout
+    repo.close()
+

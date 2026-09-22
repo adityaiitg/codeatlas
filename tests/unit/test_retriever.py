@@ -19,6 +19,10 @@ def test_query_classification(tmp_path: Path):
     w_lex, w_sem = retriever._classify_query("get_token")
     assert w_lex > w_sem
 
+    # Acronyms (JWT, HTTP) should also trigger high lexical weight
+    w_lex_acronym, w_sem_acronym = retriever._classify_query("JWT")
+    assert w_lex_acronym > w_sem_acronym
+
     # Questions should trigger high semantic weight
     w_lex, w_sem = retriever._classify_query("how does user authentication and validation work?")
     assert w_sem > w_lex
@@ -147,3 +151,16 @@ def test_context_managers(tmp_path: Path):
 
     with Retriever(settings) as ret:
         assert ret.db_path == settings.db_path
+
+
+def test_retriever_metadata_sync_fast_mode(tmp_path: Path):
+    settings = Settings(data_dir=tmp_path)
+    with GraphBuilder(settings.db_path) as gb:
+        gb.set_metadata("embedding_model", "minishlab/potion-code-16M-v2")
+        gb.set_metadata("embedding_dim", "256")
+
+    # When Retriever starts with default settings, it should automatically detect the fast model from the DB!
+    retriever = Retriever(settings)
+    assert retriever.settings.embedding_model == "minishlab/potion-code-16M-v2"
+    assert retriever.settings.embedding_dim == 256
+

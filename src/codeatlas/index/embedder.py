@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class Embedder:
     """Generates dense vector embeddings using FastEmbed or Model2Vec."""
 
-    def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5"):
+    def __init__(self, model_name: str = "minishlab/potion-code-16M-v2"):
         self.model_name = model_name
         self._model = None
         self._is_static = "potion" in model_name.lower() or "model2vec" in model_name.lower()

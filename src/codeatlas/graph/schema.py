@@ -75,6 +75,12 @@ CREATE TABLE IF NOT EXISTS file_manifest (
     indexed_at  TEXT
 );
 
+-- Index metadata table for persistent settings sync (embedding model, dim, version)
+CREATE TABLE IF NOT EXISTS index_metadata (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_edges_source ON edges(source_id);
 CREATE INDEX IF NOT EXISTS idx_edges_target ON edges(target_id);
@@ -88,13 +94,17 @@ CREATE INDEX IF NOT EXISTS idx_chunks_symbol ON chunks(symbol_id);
 
 
 def connect_db(db_path: Path) -> sqlite3.Connection:
-    """Connect to SQLite database with portable PRAGMAs for APFS, exFAT, and network drives."""
+    """Connect to SQLite database with robust PRAGMAs for concurrent readers/writers."""
     db_path = Path(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), timeout=10.0)
-    conn.execute("PRAGMA journal_mode = MEMORY;")
-    conn.execute("PRAGMA busy_timeout = 5000;")
+    conn = sqlite3.connect(str(db_path), timeout=30.0)
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")
+    except sqlite3.OperationalError:
+        conn.execute("PRAGMA journal_mode = TRUNCATE;")
+    conn.execute("PRAGMA busy_timeout = 30000;")
     conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA cache_size = -64000;")
 
     # Attempt to load sqlite-vec extension for native vector acceleration
     try:
@@ -107,6 +117,23 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
         logger.debug("sqlite-vec extension not loaded: %s", exc)
 
     return conn
+
+
+def get_index_metadata(conn: sqlite3.Connection) -> dict[str, str]:
+    """Retrieve key-value pairs from index_metadata if table exists."""
+    try:
+        cursor = conn.execute("SELECT key, value FROM index_metadata")
+        return dict(cursor.fetchall())
+    except sqlite3.OperationalError:
+        return {}
+
+
+def set_index_metadata(conn: sqlite3.Connection, key: str, value: str) -> None:
+    """Set a key-value pair in index_metadata."""
+    conn.execute(
+        "INSERT OR REPLACE INTO index_metadata (key, value) VALUES (?, ?)",
+        (key, value),
+    )
 
 
 @contextmanager

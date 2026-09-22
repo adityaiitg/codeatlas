@@ -27,17 +27,8 @@ def split_identifier(identifier: str) -> list[str]:
 class PythonParser(LanguageParser):
     """Parses Python source code into canonical symbols, chunks, and edges."""
 
-    def __init__(self):
-        self._tree_sitter_available = False
-        try:
-            import tree_sitter_python as tspython
-            from tree_sitter import Language, Parser
-
-            self._language = Language(tspython.language())
-            self._ts_parser = Parser(self._language)
-            self._tree_sitter_available = True
-        except ImportError:
-            self._tree_sitter_available = False
+    def __init__(self) -> None:
+        pass
 
     def parse_file(self, file_path: Path) -> tuple[list[Symbol], list[CodeChunk], list[Edge]]:
         """Parse a Python source file and extract symbols, chunks, and edges."""
@@ -57,8 +48,33 @@ class PythonParser(LanguageParser):
         try:
             tree = ast.parse(code, filename=str(file_path))
         except SyntaxError:
-            # If standard AST fails on invalid syntax, produce a file-level chunk
+            # If standard AST fails on invalid syntax (e.g. active editing), extract symbols via regex fallback
             lines = code.splitlines()
+            fallback_symbols: list[Symbol] = []
+            found_identifiers: list[str] = []
+
+            for lineno, line in enumerate(lines, start=1):
+                match = re.match(r"^\s*(def|class)\s+([a-zA-Z_0-9]+)", line)
+                if match:
+                    kind = SymbolKind.CLASS if match.group(1) == "class" else SymbolKind.FUNCTION
+                    name = match.group(2)
+                    nid = f"{file_path}:{name}"
+                    found_identifiers.append(name)
+                    fallback_symbols.append(
+                        Symbol(
+                            node_id=nid,
+                            file_path=str(file_path),
+                            kind=kind,
+                            name=name,
+                            start_line=lineno,
+                            end_line=lineno,
+                            source_code=line,
+                            content_hash=hashlib.sha256(line.encode("utf-8")).hexdigest(),
+                            language="python",
+                        )
+                    )
+
+            id_tokens = [t for s in found_identifiers for t in split_identifier(s)]
             chunk = CodeChunk(
                 chunk_id=f"{file_path}:1-{len(lines)}",
                 symbol_id=None,
@@ -70,10 +86,10 @@ class PythonParser(LanguageParser):
                 language="python",
                 content_hash=file_hash,
                 is_definition=False,
-                identifiers=[],
-                identifier_tokens=[],
+                identifiers=found_identifiers,
+                identifier_tokens=list(set(id_tokens)),
             )
-            return [], [chunk], []
+            return fallback_symbols, [chunk], []
 
         lines = code.splitlines(keepends=True)
         module_doc = ast.get_docstring(tree)
@@ -153,15 +169,20 @@ class PythonParser(LanguageParser):
                 self.class_node_id: str | None = None
 
             def visit_ClassDef(self, node: ast.ClassDef):
-                start = node.lineno
+                start = node.decorator_list[0].lineno if getattr(node, "decorator_list", None) else node.lineno
                 end = getattr(node, "end_lineno", start)
                 class_src = "".join(lines[start - 1 : end])
                 class_hash = hashlib.sha256(class_src.encode()).hexdigest()
                 doc = ast.get_docstring(node)
                 class_node_id = f"{file_path}:{node.name}"
 
-                bases = [ast.unparse(b) for b in node.bases]
-                calls = self.parser._extract_calls(node)
+                bases = [self.parser._resolve_callee_expr(b) or ast.unparse(b) for b in node.bases]
+                # Extract calls only from class-level statements, avoiding walking methods twice
+                class_calls: list[str] = []
+                for stmt in node.body:
+                    if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                        class_calls.extend(self.parser._extract_calls(stmt))
+                calls = list(dict.fromkeys(class_calls))
 
                 sym = Symbol(
                     node_id=class_node_id,
@@ -247,7 +268,7 @@ class PythonParser(LanguageParser):
             def _handle_function(
                 self, node: ast.FunctionDef | ast.AsyncFunctionDef, is_async: bool
             ):
-                start = node.lineno
+                start = node.decorator_list[0].lineno if getattr(node, "decorator_list", None) else node.lineno
                 end = getattr(node, "end_lineno", start)
                 fn_src = "".join(lines[start - 1 : end])
                 fn_hash = hashlib.sha256(fn_src.encode()).hexdigest()
@@ -355,14 +376,28 @@ class PythonParser(LanguageParser):
 
         return symbols, chunks, edges
 
+    @staticmethod
+    def _resolve_callee_expr(node: ast.AST) -> str | None:
+        """Fast iterative attribute chain resolver avoiding ast.unparse overhead."""
+        parts: list[str] = []
+        curr: ast.AST = node
+        while isinstance(curr, ast.Attribute):
+            parts.append(curr.attr)
+            curr = curr.value
+        if isinstance(curr, ast.Name):
+            parts.append(curr.id)
+            return ".".join(reversed(parts))
+        try:
+            return ast.unparse(node)
+        except Exception:
+            return None
+
     def _extract_calls(self, node: ast.AST) -> list[str]:
         """Extract all function/method call names inside an AST subtree."""
         calls: list[str] = []
         for n in ast.walk(node):
             if isinstance(n, ast.Call):
-                try:
-                    callee = ast.unparse(n.func)
+                callee = self._resolve_callee_expr(n.func)
+                if callee:
                     calls.append(callee)
-                except Exception:
-                    pass
         return list(dict.fromkeys(calls))  # preserve order, unique

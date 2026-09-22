@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from pathlib import Path
 from types import TracebackType
 
@@ -53,18 +54,33 @@ class Indexer:
     def index_repository(self, force: bool = False) -> dict:
         """Scan and index all files in the repository."""
         scanned_files = self.scanner.scan()
-        manifest = {} if force else self.graph_builder.get_manifest()
+        manifest_details = {} if force else self.graph_builder.get_manifest_details()
 
         current_files = {str(p): p for p, _ in scanned_files}
-        deleted_files = set(manifest.keys()) - set(current_files.keys())
+        deleted_files = set(manifest_details.keys()) - set(current_files.keys())
 
         # Remove deleted files from index
         for del_path in deleted_files:
             self.graph_builder.remove_file(del_path)
 
-        files_to_index: list[tuple[Path, str]] = []
+        files_to_index: list[tuple[Path, str, str, os.stat_result]] = []
         for path, lang in scanned_files:
             path_str = str(path)
+            cached = manifest_details.get(path_str)
+            try:
+                st = path.stat()
+            except OSError as exc:
+                logger.warning("Skipping unreadable file %s: %s", path, exc)
+                continue
+
+            # Stat-first check: if size and mtime match, skip reading disk and computing SHA-256
+            if not force and cached is not None:
+                cached_size = cached.get("size")
+                cached_mtime = cached.get("mtime")
+                if cached_size is not None and cached_mtime is not None:
+                    if st.st_size == cached_size and abs(st.st_mtime - cached_mtime) < 1e-4:
+                        continue
+
             try:
                 content = path.read_bytes()
                 curr_hash = hashlib.sha256(content).hexdigest()
@@ -72,18 +88,14 @@ class Indexer:
                 logger.warning("Skipping unreadable file %s: %s", path, exc)
                 continue
 
-            if force or manifest.get(path_str) != curr_hash:
-                files_to_index.append((path, lang))
+            if force or cached is None or cached.get("content_hash") != curr_hash:
+                files_to_index.append((path, lang, curr_hash, st))
 
         indexed_count = 0
         all_new_chunks = []
 
-        for path, lang in files_to_index:
+        for path, lang, curr_hash, stat in files_to_index:
             path_str = str(path)
-            content = path.read_bytes()
-            curr_hash = hashlib.sha256(content).hexdigest()
-            stat = path.stat()
-
             # Clean previous state for this file
             self.graph_builder.remove_file(path_str)
 
@@ -104,13 +116,28 @@ class Indexer:
             )
             indexed_count += 1
 
-        # Generate and store dense vector embeddings
+        # Generate and store dense vector embeddings in bounded batches
         if self.embed_vectors and self.embedder and all_new_chunks:
-            texts = [c.content for c in all_new_chunks]
-            chunk_ids = [c.chunk_id for c in all_new_chunks]
-            vectors = self.embedder.embed_texts(texts)
-            id_vectors = list(zip(chunk_ids, vectors, strict=True))
-            self.graph_builder.add_embeddings(id_vectors)
+            batch_size = 256
+            for i in range(0, len(all_new_chunks), batch_size):
+                chunk_batch = all_new_chunks[i : i + batch_size]
+                texts = [c.content for c in chunk_batch]
+                chunk_ids = [c.chunk_id for c in chunk_batch]
+                vectors = self.embedder.embed_texts(texts)
+                id_vectors = list(zip(chunk_ids, vectors, strict=True))
+                self.graph_builder.add_embeddings(id_vectors)
+
+        # Persist index configuration metadata
+        self.graph_builder.set_metadata("embedding_model", self.settings.embedding_model)
+        self.graph_builder.set_metadata("embedding_dim", str(self.settings.embedding_dim))
+        self.graph_builder.set_metadata("embed_vectors", str(int(self.embed_vectors)))
+
+        # Resolve symbolic call and import edges into canonical symbol IDs
+        from codeatlas.graph.linker import GraphLinker
+
+        linker = GraphLinker(self.settings.db_path)
+        resolved_count = linker.link()
+        logger.debug("Resolved %d call and symbol edges in knowledge graph", resolved_count)
 
         stats = self.graph_builder.get_stats()
         stats["indexed_files_this_run"] = indexed_count

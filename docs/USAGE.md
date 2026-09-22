@@ -277,6 +277,48 @@ codeatlas mcp
 
 ---
 
+### `codeatlas watch`
+
+Continuously polls the codebase for file changes and triggers ultra-fast incremental re-indexing in the background:
+
+```bash
+# Watch current repository with default 3-second polling interval
+codeatlas watch .
+
+# Custom polling interval
+codeatlas watch . --interval 5
+```
+
+---
+
+### `codeatlas hook`
+
+Installs or removes Git hooks (`post-commit`, `post-checkout`, `post-merge`) so that every commit or branch switch automatically updates the CodeAtlas index in the background:
+
+```bash
+# Install git hooks
+codeatlas hook install
+
+# Remove git hooks
+codeatlas hook uninstall
+```
+
+---
+
+### `codeatlas serve`
+
+Spins up a local web server with an interactive, force-directed Knowledge Graph visualization (D3.js) and real-time symbol search in your browser:
+
+```bash
+# Serve knowledge graph on default port 8765 and open in browser
+codeatlas serve
+
+# Custom port without opening browser automatically
+codeatlas serve --port 9000 --no-open
+```
+
+---
+
 ## 4. AI Agent & Editor Skill Integration
 
 ### Why Use CLI Skills for AI Coding Agents?

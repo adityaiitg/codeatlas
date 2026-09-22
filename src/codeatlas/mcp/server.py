@@ -96,21 +96,45 @@ class MCPServer:
         target_path = (repo_path or Path(".")).resolve()
         data_dir = target_path / ".codeatlas"
         self.settings = Settings(repo_path=target_path, data_dir=data_dir)
+        self._retriever: Retriever | None = None
+        self._graph_queries: GraphQueries | None = None
+
+    @property
+    def retriever(self) -> Retriever:
+        if self._retriever is None:
+            self._retriever = Retriever(self.settings)
+        return self._retriever
+
+    @property
+    def graph_queries(self) -> GraphQueries:
+        if self._graph_queries is None:
+            self._graph_queries = GraphQueries(self.settings.db_path)
+        return self._graph_queries
+
+    def close(self) -> None:
+        """Release cached retriever and database connections."""
+        if self._retriever:
+            self._retriever.close()
+            self._retriever = None
+        self._graph_queries = None
 
     def run(self) -> None:
         """Run the main MCP request-response loop reading from standard input."""
-        for line in sys.stdin:
-            line = line.strip()
-            if not line:
-                continue
+        try:
+            for line in sys.stdin:
+                line = line.strip()
+                if not line:
+                    continue
 
-            try:
-                request = json.loads(line)
-            except json.JSONDecodeError as exc:
-                self._send_error(None, -32700, f"Parse error: {exc}")
-                continue
+                try:
+                    request = json.loads(line)
+                except json.JSONDecodeError as exc:
+                    self._send_error(None, -32700, f"Parse error: {exc}")
+                    continue
 
-            self._handle_request(request)
+                self._handle_request(request)
+        finally:
+            self.close()
 
     def _handle_request(self, request: dict[str, Any]) -> None:
         req_id = request.get("id")
@@ -143,6 +167,7 @@ class MCPServer:
     def _handle_tool_call(self, req_id: Any, params: dict[str, Any]) -> None:
         tool_name = params.get("name")
         args = params.get("arguments", {})
+        res: Any = None
 
         try:
             if tool_name == "codeatlas_search":
@@ -188,29 +213,28 @@ class MCPServer:
         mode = args.get("mode", "hybrid")
         limit = int(args.get("limit", 5))
 
-        with Retriever(self.settings) as retriever:
-            results = retriever.search(query=query, limit=limit, mode=mode, expand_graph=True)
-            return [
-                {
-                    "file_path": r.file_path,
-                    "start_line": r.start_line,
-                    "end_line": r.end_line,
-                    "score": round(r.score, 4),
-                    "is_definition": r.is_definition,
-                    "content": r.content,
-                    "neighbors": [
-                        {"name": n["name"], "kind": n["kind"], "file": n["file_path"]}
-                        for n in r.neighbors[:3]
-                    ],
-                }
-                for r in results
-            ]
+        results = self.retriever.search(query=query, limit=limit, mode=mode, expand_graph=True)
+        return [
+            {
+                "file_path": r.file_path,
+                "start_line": r.start_line,
+                "end_line": r.end_line,
+                "score": round(r.score, 4),
+                "is_definition": r.is_definition,
+                "content": r.content,
+                "neighbors": [
+                    {"name": n["name"], "kind": n["kind"], "file": n["file_path"]}
+                    for n in r.neighbors[:3]
+                ],
+            }
+            for r in results
+        ]
 
     def _tool_graph(self, args: dict[str, Any]) -> dict[str, Any]:
         symbol = args.get("symbol", "")
         depth = int(args.get("depth", 1))
 
-        gq = GraphQueries(self.settings.db_path)
+        gq = self.graph_queries
         matches = [n for n in gq.G.nodes if symbol in n]
         if not matches:
             return {"error": f"Symbol '{symbol}' not found in knowledge graph"}
@@ -229,7 +253,7 @@ class MCPServer:
 
     def _tool_impact(self, args: dict[str, Any]) -> dict[str, Any]:
         symbol = args.get("symbol", "")
-        gq = GraphQueries(self.settings.db_path)
+        gq = self.graph_queries
         matches = [n for n in gq.G.nodes if symbol in n]
         if not matches:
             return {"error": f"Symbol '{symbol}' not found in knowledge graph"}

@@ -141,11 +141,11 @@ class WikiGenerator:
 | :--- | :--- | :--- |
 """
         for fpath, syms in sorted(files_map.items()):
-            names = ", ".join(f"`{s['name']}`" for s in syms if s["kind"] in ("class", "function"))
+            sym_names_str = ", ".join(f"`{s['name']}`" for s in syms if s["kind"] in ("class", "function"))
             summary = next((s["docstring"] for s in syms if s["docstring"]), "Source module")
             first_line = summary.split("\n")[0] if summary else ""
             rel_path = Path(fpath).name
-            content += f"| [`{rel_path}`](./modules/{Path(fpath).stem}.md) | {names or 'Module'} | {first_line} |\n"
+            content += f"| [`{rel_path}`](./modules/{Path(fpath).stem}.md) | {sym_names_str or 'Module'} | {first_line} |\n"
 
         arch_file.write_text(content, encoding="utf-8")
         return arch_file

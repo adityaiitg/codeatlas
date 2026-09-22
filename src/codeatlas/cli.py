@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from importlib.metadata import version as pkg_version
 from pathlib import Path
@@ -56,6 +57,10 @@ app = typer.Typer(
     add_completion=False,
     callback=lambda version: None,  # placeholder, real callback below
 )
+
+hook_app = typer.Typer(help="Manage Git hooks for automatic incremental re-indexing.")
+app.add_typer(hook_app, name="hook")
+
 
 
 @app.callback()
@@ -135,6 +140,46 @@ def index(
 
 
 @app.command()
+def watch(
+    path: Path = typer.Argument(Path("."), help="Path to repository to watch"),
+    interval: int = typer.Option(3, "--interval", "-i", help="Polling interval in seconds"),
+    no_vectors: bool = typer.Option(False, "--no-vectors", help="Skip dense vector embeddings"),
+    fast: bool = typer.Option(
+        True, "--fast/--no-fast", help="Use fast Model2Vec embeddings"
+    ),
+) -> None:
+    """Watch repository for file modifications and incrementally re-index."""
+    import time
+    from datetime import datetime
+
+    settings = get_settings(path, fast=fast)
+    console.print(f"[bold cyan]CodeAtlas Watch Mode[/bold cyan] started for: {settings.repo_path}")
+    console.print(f"[dim]Polling every {interval}s. Press Ctrl+C to exit.[/dim]\n")
+
+    try:
+        with Indexer(settings, embed_vectors=not no_vectors) as indexer:
+            stats = indexer.index_repository(force=False)
+            now_str = datetime.now().strftime("%H:%M:%S")
+            console.print(
+                f"[{now_str}] Initial index: {stats.get('files', 0)} files, "
+                f"{stats.get('symbols', 0)} symbols, {stats.get('chunks', 0)} chunks."
+            )
+
+            while True:
+                time.sleep(interval)
+                stats = indexer.index_repository(force=False)
+                indexed_count = stats.get("indexed_files_this_run", 0)
+                if indexed_count > 0:
+                    now_str = datetime.now().strftime("%H:%M:%S")
+                    console.print(
+                        f"[{now_str}] [green]Updated[/green]: {indexed_count} file(s) re-indexed "
+                        f"({stats.get('symbols', 0)} total symbols, {stats.get('edges', 0)} edges)."
+                    )
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Watch mode stopped by user.[/yellow]")
+
+
+@app.command()
 def search(
     query: str = typer.Argument(..., help="Search query (natural language or symbol name)"),
     path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
@@ -144,6 +189,9 @@ def search(
     ),
     expand: bool = typer.Option(
         True, "--expand/--no-expand", help="Expand graph neighborhood context"
+    ),
+    json_out: bool = typer.Option(
+        False, "--json", help="Output results as JSON for scripting and AI agents"
     ),
 ):
     """Hybrid code search with BM25, dense vectors, and graph neighborhood expansion."""
@@ -155,6 +203,25 @@ def search(
 
     with Retriever(settings) as retriever:
         results = retriever.search(query=query, limit=limit, mode=mode, expand_graph=expand)
+
+    if json_out:
+        out_list = [
+            {
+                "chunk_id": r.chunk_id,
+                "symbol_id": r.symbol_id,
+                "file_path": r.file_path,
+                "start_line": r.start_line,
+                "end_line": r.end_line,
+                "content": r.content,
+                "chunk_type": r.chunk_type,
+                "is_definition": r.is_definition,
+                "score": r.score,
+                "neighbors": r.neighbors,
+            }
+            for r in results
+        ]
+        typer.echo(json.dumps(out_list, indent=2))
+        return
 
     if not results:
         console.print(f"[yellow]No results found for query:[/yellow] '{query}'")
@@ -256,6 +323,9 @@ def graph(
 def impact(
     symbol: str = typer.Argument(..., help="Symbol name to analyze for change blast radius"),
     path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
+    json_out: bool = typer.Option(
+        False, "--json", help="Output impact analysis as JSON for scripting and AI agents"
+    ),
 ):
     """Analyze change impact and blast radius if a symbol is modified."""
     settings = get_settings(path)
@@ -268,6 +338,9 @@ def impact(
     gq = GraphQueries(settings.db_path)
     matches = [n for n in gq.G.nodes if symbol in n]
     if not matches:
+        if json_out:
+            typer.echo(json.dumps({"target": symbol, "matches": [], "direct_dependents": [], "affected_count": 0}))
+            return
         console.print(f"[yellow]Symbol '{symbol}' not found in knowledge graph.[/yellow]")
         return
 
@@ -281,6 +354,10 @@ def impact(
     )
     target_node = matches[0]
     analysis = gq.impact_analysis(target_node)
+
+    if json_out:
+        typer.echo(json.dumps(analysis, indent=2))
+        return
 
     console.print(
         Panel(
@@ -479,8 +556,21 @@ def config(
 @app.command()
 def mcp(
     path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
-):
+) -> None:
     """Start the Model Context Protocol (MCP) server over standard I/O."""
+    import sys
+
+    # Protect stdio JSON-RPC stream by redirecting all logs to stderr
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(message)s",
+        stream=sys.stderr,
+        force=True,
+    )
+    for handler in logging.root.handlers[:]:
+        if getattr(handler, "stream", None) is sys.stdout:
+            logging.root.removeHandler(handler)
+
     from codeatlas.mcp.server import MCPServer
 
     server = MCPServer(repo_path=path)
@@ -534,6 +624,63 @@ def uninstall(
 
     console.print(table)
     console.print("[bold yellow]✓ Agent configuration cleaned up![/bold yellow]\n")
+
+
+@hook_app.command("install")
+def hook_install(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
+) -> None:
+    """Install git hooks for automatic incremental re-indexing on commit and checkout."""
+    tracker = GitTracker(path.resolve())
+    if not tracker.is_git_repo:
+        console.print(f"[bold red]Error:[/bold red] '{path}' is not a valid git repository.")
+        raise typer.Exit(code=1)
+
+    hooks = tracker.install_hooks()
+    console.print(f"[bold green]✓ Installed CodeAtlas git hooks:[/bold green] {', '.join(hooks)}")
+    console.print("[dim]CodeAtlas will now automatically re-index incrementally in the background on commit and checkout.[/dim]\n")
+
+
+@hook_app.command("uninstall")
+def hook_uninstall(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
+) -> None:
+    """Remove CodeAtlas git hooks from the repository."""
+    tracker = GitTracker(path.resolve())
+    if not tracker.is_git_repo:
+        console.print(f"[bold red]Error:[/bold red] '{path}' is not a valid git repository.")
+        raise typer.Exit(code=1)
+
+    hooks = tracker.uninstall_hooks()
+    if hooks:
+        console.print(f"[bold yellow]✓ Removed CodeAtlas git hooks:[/bold yellow] {', '.join(hooks)}\n")
+    else:
+        console.print("[dim]No CodeAtlas hooks found in repository.[/dim]\n")
+
+
+@app.command()
+def serve(
+    path: Path = typer.Option(Path("."), "--path", "-p", help="Repository path"),
+    port: int = typer.Option(8765, "--port", help="Port to bind the web server to"),
+    host: str = typer.Option("127.0.0.1", "--host", help="Host address to bind to"),
+    open_browser: bool = typer.Option(True, "--open/--no-open", help="Open browser automatically"),
+) -> None:
+    """Start local web server with an interactive Knowledge Graph visualization."""
+    from codeatlas.web.viewer import start_viewer
+
+    target_path = path.resolve()
+    settings = get_settings(target_path)
+    if not settings.db_path.exists():
+        console.print("[bold red]Error:[/bold red] Repository has not been indexed yet.")
+        console.print("Run [bold cyan]codeatlas index[/bold cyan] first.")
+        raise typer.Exit(code=1)
+
+    console.print(f"[bold cyan]Starting CodeAtlas Web Viewer at:[/bold cyan] http://{host}:{port}")
+    console.print("[dim]Press Ctrl+C to stop the server.[/dim]\n")
+    try:
+        start_viewer(target_path, host=host, port=port, open_browser=open_browser)
+    except KeyboardInterrupt:
+        console.print("\n[yellow]Web server stopped.[/yellow]")
 
 
 if __name__ == "__main__":

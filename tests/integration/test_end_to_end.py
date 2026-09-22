@@ -60,3 +60,35 @@ def test_full_codeatlas_pipeline(tmp_path: Path):
     arch_file = settings.wiki_dir / "architecture.md"
     assert arch_file.exists()
     assert "System Architecture" in arch_file.read_text(encoding="utf-8")
+
+
+def test_indexer_stat_first_incremental(tmp_path: Path):
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    f1 = repo_dir / "file1.py"
+    f2 = repo_dir / "file2.py"
+    f1.write_text("def foo(): pass\n", encoding="utf-8")
+    f2.write_text("def bar(): pass\n", encoding="utf-8")
+
+    settings = Settings(repo_path=repo_dir, data_dir=tmp_path / ".codeatlas")
+    indexer = Indexer(settings, embed_vectors=False)
+
+    # Initial index: both files indexed
+    stats1 = indexer.index_repository(force=False)
+    assert stats1["indexed_files_this_run"] == 2
+
+    # Second index with no changes: 0 files re-indexed
+    stats2 = indexer.index_repository(force=False)
+    assert stats2["indexed_files_this_run"] == 0
+
+    # Modify file1
+    import time
+    time.sleep(0.01)
+    f1.write_text("def foo(): return 42\n", encoding="utf-8")
+
+    # Third index: only file1 re-indexed
+    stats3 = indexer.index_repository(force=False)
+    assert stats3["indexed_files_this_run"] == 1
+
+    indexer.close()
+

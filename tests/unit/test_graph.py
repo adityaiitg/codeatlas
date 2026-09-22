@@ -96,3 +96,53 @@ def test_graph_builder_and_queries(tmp_path: Path):
     # Impact analysis: if sym3 changes, sym2 might be affected
     impact = gq.impact_analysis(sym1.node_id)
     assert sym2.node_id in impact["direct_dependents"]
+
+
+def test_graph_linker(tmp_path: Path):
+    from codeatlas.graph.linker import GraphLinker
+
+    db_path = tmp_path / "linker_test.db"
+    builder = GraphBuilder(db_path)
+
+    sym1 = Symbol(
+        node_id="src/service.py:handle_request",
+        file_path="src/service.py",
+        kind=SymbolKind.FUNCTION,
+        name="handle_request",
+        start_line=1,
+        end_line=10,
+        source_code="def handle_request(): validate()",
+        content_hash="h1",
+    )
+    sym2 = Symbol(
+        node_id="src/validator.py:validate",
+        file_path="src/validator.py",
+        kind=SymbolKind.FUNCTION,
+        name="validate",
+        start_line=1,
+        end_line=5,
+        source_code="def validate(): pass",
+        content_hash="h2",
+    )
+    builder.add_symbols([sym1, sym2])
+
+    # Add raw unresolved call edge emitted by AST parser
+    raw_call_edge = Edge(
+        source_id=sym1.node_id,
+        target_id="call:validate",
+        edge_type=EdgeType.CALLS,
+        metadata={"lineno": 2},
+    )
+    builder.add_edges([raw_call_edge])
+    builder.close()
+
+    linker = GraphLinker(db_path)
+    resolved = linker.link()
+    assert resolved == 1
+
+    gq = GraphQueries(db_path)
+    callers = gq.get_callers(sym2.node_id)
+    assert sym1.node_id in callers
+    callees = gq.get_callees(sym1.node_id)
+    assert sym2.node_id in callees
+

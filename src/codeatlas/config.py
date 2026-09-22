@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     data_dir: Path = Path(".codeatlas")
 
     # Embedding
-    embedding_model: str = "BAAI/bge-small-en-v1.5"
-    embedding_dim: int = 384
+    embedding_model: str = "minishlab/potion-code-16M-v2"
+    embedding_dim: int = 256
 
     # LLM
     llm_provider: str = "ollama"

@@ -10,7 +10,14 @@ from types import TracebackType
 
 import numpy as np
 
-from codeatlas.graph.schema import SCHEMA_SQL, connect_db, has_vec_table, init_vec_table
+from codeatlas.graph.schema import (
+    SCHEMA_SQL,
+    connect_db,
+    get_index_metadata,
+    has_vec_table,
+    init_vec_table,
+    set_index_metadata,
+)
 from codeatlas.models.chunks import CodeChunk
 from codeatlas.models.relationships import Edge
 from codeatlas.models.symbols import Symbol
@@ -80,81 +87,107 @@ class GraphBuilder:
         self.conn.commit()
 
     def add_symbols(self, symbols: list[Symbol]):
-        """Insert or replace symbols in the database."""
-        for sym in symbols:
-            self.conn.execute(
-                """INSERT OR REPLACE INTO symbols
-                   (node_id, file_path, kind, name, parent_id, signature,
-                    docstring, source_code, start_line, end_line, source_hash, language)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    sym.node_id,
-                    sym.file_path,
-                    sym.kind.value,
-                    sym.name,
-                    sym.parent_symbol,
-                    sym.signature,
-                    sym.docstring,
-                    sym.source_code,
-                    sym.start_line,
-                    sym.end_line,
-                    sym.content_hash,
-                    sym.language,
-                ),
+        """Insert or replace symbols in the database using batch execution."""
+        if not symbols:
+            return
+        rows = [
+            (
+                sym.node_id,
+                sym.file_path,
+                sym.kind.value,
+                sym.name,
+                sym.parent_symbol,
+                sym.signature,
+                sym.docstring,
+                sym.source_code,
+                sym.start_line,
+                sym.end_line,
+                sym.content_hash,
+                sym.language,
             )
+            for sym in symbols
+        ]
+        self.conn.executemany(
+            """INSERT OR REPLACE INTO symbols
+               (node_id, file_path, kind, name, parent_id, signature,
+                docstring, source_code, start_line, end_line, source_hash, language)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            rows,
+        )
         self.conn.commit()
 
     def add_edges(self, edges: list[Edge]):
-        """Insert edges into the graph."""
-        for edge in edges:
-            meta = json.dumps(edge.metadata) if edge.metadata else None
-            self.conn.execute(
-                """INSERT OR IGNORE INTO edges
-                   (source_id, target_id, edge_type, metadata)
-                   VALUES (?, ?, ?, ?)""",
-                (edge.source_id, edge.target_id, edge.edge_type.value, meta),
+        """Insert edges into the graph using batch execution."""
+        if not edges:
+            return
+        rows = [
+            (
+                edge.source_id,
+                edge.target_id,
+                edge.edge_type.value,
+                json.dumps(edge.metadata) if edge.metadata else None,
             )
+            for edge in edges
+        ]
+        self.conn.executemany(
+            """INSERT OR IGNORE INTO edges
+               (source_id, target_id, edge_type, metadata)
+               VALUES (?, ?, ?, ?)""",
+            rows,
+        )
         self.conn.commit()
 
     def add_chunks(self, chunks: list[CodeChunk]):
-        """Insert chunks into the relational table and FTS5 search index."""
-        for chunk in chunks:
-            # 1. Main chunks table
-            self.conn.execute(
-                """INSERT OR REPLACE INTO chunks
-                   (chunk_id, symbol_id, file_path, chunk_type, content,
-                    start_line, end_line, language, content_hash,
-                    is_definition, identifiers, identifier_tokens)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    chunk.chunk_id,
-                    chunk.symbol_id,
-                    chunk.file_path,
-                    chunk.chunk_type.value,
-                    chunk.content,
-                    chunk.start_line,
-                    chunk.end_line,
-                    chunk.language,
-                    chunk.content_hash,
-                    int(chunk.is_definition),
-                    json.dumps(chunk.identifiers),
-                    json.dumps(chunk.identifier_tokens),
-                ),
+        """Insert chunks into the relational table and FTS5 search index using batch execution."""
+        if not chunks:
+            return
+        chunk_rows = [
+            (
+                chunk.chunk_id,
+                chunk.symbol_id,
+                chunk.file_path,
+                chunk.chunk_type.value,
+                chunk.content,
+                chunk.start_line,
+                chunk.end_line,
+                chunk.language,
+                chunk.content_hash,
+                int(chunk.is_definition),
+                json.dumps(chunk.identifiers),
+                json.dumps(chunk.identifier_tokens),
             )
+            for chunk in chunks
+        ]
+        self.conn.executemany(
+            """INSERT OR REPLACE INTO chunks
+               (chunk_id, symbol_id, file_path, chunk_type, content,
+                start_line, end_line, language, content_hash,
+                is_definition, identifiers, identifier_tokens)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            chunk_rows,
+        )
 
-            # 2. FTS5 table
-            id_str = " ".join(chunk.identifiers)
-            token_str = " ".join(chunk.identifier_tokens)
-            self.conn.execute("DELETE FROM chunks_fts WHERE chunk_id = ?", (chunk.chunk_id,))
-            self.conn.execute(
-                """INSERT INTO chunks_fts (chunk_id, file_path, content, identifiers, identifier_tokens)
-                   VALUES (?, ?, ?, ?, ?)""",
-                (chunk.chunk_id, chunk.file_path, chunk.content, id_str, token_str),
+        fts_del_rows = [(c.chunk_id,) for c in chunks]
+        self.conn.executemany("DELETE FROM chunks_fts WHERE chunk_id = ?", fts_del_rows)
+        fts_rows = [
+            (
+                c.chunk_id,
+                c.file_path,
+                c.content,
+                " ".join(c.identifiers),
+                " ".join(c.identifier_tokens),
             )
+            for c in chunks
+        ]
+        self.conn.executemany(
+            """INSERT INTO chunks_fts (chunk_id, file_path, content, identifiers, identifier_tokens)
+               VALUES (?, ?, ?, ?, ?)""",
+            fts_rows,
+        )
         self.conn.commit()
 
     def add_embeddings(self, chunk_id_vectors: list[tuple[str, np.ndarray]]):
-        """Insert dense vector embeddings for chunks."""
+        """Insert dense vector embeddings for chunks using batch execution."""
         if not chunk_id_vectors:
             return
 
@@ -162,27 +195,32 @@ class GraphBuilder:
             dim = len(chunk_id_vectors[0][1])
             self._has_vec = init_vec_table(self.conn, dim=dim) or has_vec_table(self.conn)
 
+        vec_rows = []
+        vec_plugin_rows = []
         for chunk_id, vec in chunk_id_vectors:
             vec_f32 = vec.astype(np.float32)
             vec_bytes = vec_f32.tobytes()
-            self.conn.execute(
-                """INSERT OR REPLACE INTO chunk_vectors (chunk_id, embedding, dim)
-                   VALUES (?, ?, ?)""",
-                (chunk_id, vec_bytes, len(vec)),
-            )
+            vec_rows.append((chunk_id, vec_bytes, len(vec)))
             if self._has_vec:
-                try:
-                    self.conn.execute(
-                        "DELETE FROM chunk_vectors_vec WHERE chunk_id = ?", (chunk_id,)
-                    )
-                    self.conn.execute(
-                        "INSERT INTO chunk_vectors_vec (chunk_id, embedding) VALUES (?, ?)",
-                        (chunk_id, vec_f32),
-                    )
-                except Exception as exc:
-                    logger.debug(
-                        "Failed inserting into chunk_vectors_vec for %s: %s", chunk_id, exc
-                    )
+                vec_plugin_rows.append((chunk_id, vec_f32))
+
+        self.conn.executemany(
+            """INSERT OR REPLACE INTO chunk_vectors (chunk_id, embedding, dim)
+               VALUES (?, ?, ?)""",
+            vec_rows,
+        )
+        if self._has_vec and vec_plugin_rows:
+            try:
+                del_rows = [(cid,) for cid, _ in vec_plugin_rows]
+                self.conn.executemany(
+                    "DELETE FROM chunk_vectors_vec WHERE chunk_id = ?", del_rows
+                )
+                self.conn.executemany(
+                    "INSERT INTO chunk_vectors_vec (chunk_id, embedding) VALUES (?, ?)",
+                    vec_plugin_rows,
+                )
+            except Exception as exc:
+                logger.debug("Failed inserting into chunk_vectors_vec: %s", exc)
         self.conn.commit()
 
     def update_file_manifest(
@@ -202,6 +240,23 @@ class GraphBuilder:
         """Return a mapping of file_path -> content_hash for all indexed files."""
         cursor = self.conn.execute("SELECT file_path, content_hash FROM file_manifest")
         return {row[0]: row[1] for row in cursor.fetchall()}
+
+    def get_manifest_details(self) -> dict[str, dict]:
+        """Return a mapping of file_path -> {content_hash, mtime, size} for fast change detection."""
+        cursor = self.conn.execute("SELECT file_path, content_hash, mtime, size FROM file_manifest")
+        return {
+            row[0]: {"content_hash": row[1], "mtime": row[2], "size": row[3]}
+            for row in cursor.fetchall()
+        }
+
+    def set_metadata(self, key: str, value: str) -> None:
+        """Store index metadata key-value pair."""
+        set_index_metadata(self.conn, key, value)
+        self.conn.commit()
+
+    def get_metadata(self) -> dict[str, str]:
+        """Retrieve all index metadata key-value pairs."""
+        return get_index_metadata(self.conn)
 
     def get_stats(self) -> dict:
         """Get summary statistics of the indexed knowledge graph."""

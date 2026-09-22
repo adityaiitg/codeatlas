@@ -11,7 +11,7 @@ import numpy as np
 
 from codeatlas.config import Settings
 from codeatlas.graph.queries import GraphQueries
-from codeatlas.graph.schema import get_db_connection, has_vec_table
+from codeatlas.graph.schema import get_db_connection, get_index_metadata, has_vec_table
 from codeatlas.index.embedder import Embedder
 
 logger = logging.getLogger(__name__)
@@ -47,7 +47,20 @@ class Retriever:
     def __init__(self, settings: Settings):
         self.settings = settings
         self.db_path = settings.db_path
-        self.embedder = Embedder(model_name=settings.embedding_model)
+
+        # Synchronize embedding model from index metadata if available
+        if self.db_path.exists():
+            with get_db_connection(self.db_path) as conn:
+                meta = get_index_metadata(conn)
+                if "embedding_model" in meta:
+                    self.settings.embedding_model = meta["embedding_model"]
+                if "embedding_dim" in meta:
+                    try:
+                        self.settings.embedding_dim = int(meta["embedding_dim"])
+                    except ValueError:
+                        pass
+
+        self.embedder = Embedder(model_name=self.settings.embedding_model)
         self.graph_queries = GraphQueries(settings.db_path)
 
     def __enter__(self) -> Retriever:
@@ -68,8 +81,8 @@ class Retriever:
     def _classify_query(self, query: str) -> tuple[float, float]:
         """Classify query to dynamically adjust lexical vs semantic weights."""
         q = query.strip()
-        # If query has code identifiers (dots, underscores, parentheses, camelCase)
-        has_identifier_syntax = bool(re.search(r"[_.:()]|[a-z][A-Z]", q))
+        # If query has code identifiers (dots, underscores, parentheses, camelCase, or all-caps acronyms)
+        has_identifier_syntax = bool(re.search(r"[_.:()]|[a-z][A-Z]|\b[A-Z]{2,}\b", q))
         word_count = len(q.split())
 
         if has_identifier_syntax or word_count <= 2:
@@ -196,7 +209,13 @@ class Retriever:
             lex_results = self._search_lexical(query, limit=50)
 
         if mode in ("hybrid", "semantic"):
-            sem_results = self._search_semantic(query, limit=50)
+            try:
+                sem_results = self._search_semantic(query, limit=50)
+            except Exception as exc:
+                logger.warning("Semantic search unavailable: %s; falling back to lexical search", exc)
+                sem_results = []
+                if mode == "semantic" and not lex_results:
+                    lex_results = self._search_lexical(query, limit=50)
 
         lex_ranks = {cid: rank for rank, (cid, _) in enumerate(lex_results, start=1)}
         sem_ranks = {cid: rank for rank, (cid, _) in enumerate(sem_results, start=1)}
@@ -252,14 +271,19 @@ class Retriever:
                 rrf_score *= 2.0
 
             file_stem = Path(chunk_data["file_path"]).stem.lower()
-            if file_stem and (clean_q == file_stem or clean_q.rstrip("s") == file_stem.rstrip("s")):
+            is_stem_match = (
+                clean_q == file_stem
+                or (clean_q.endswith("s") and not clean_q.endswith("ss") and clean_q[:-1] == file_stem)
+                or (file_stem.endswith("s") and not file_stem.endswith("ss") and file_stem[:-1] == clean_q)
+            )
+            if file_stem and is_stem_match:
                 rrf_score *= 1.4
             elif any(w == file_stem for w in clean_q.split() if len(w) > 2):
                 rrf_score *= 1.2
 
             # Noise penalties: down-rank test files and compat directories unless query asks for tests
             fpath = chunk_data["file_path"]
-            is_test_query = "test" in clean_q or "spec" in clean_q
+            is_test_query = bool(re.search(r"\b(test|tests|spec|specs)\b", clean_q))
             if not is_test_query:
                 if TEST_PATH_RE.search(fpath):
                     rrf_score *= 0.35
