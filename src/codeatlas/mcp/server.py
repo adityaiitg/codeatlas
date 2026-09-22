@@ -16,7 +16,7 @@ from codeatlas.retrieval.retriever import Retriever
 logger = logging.getLogger(__name__)
 
 SERVER_NAME = "codeatlas"
-SERVER_VERSION = "0.1.0"
+SERVER_VERSION = "0.2.0"
 PROTOCOL_VERSION = "2024-11-05"
 
 TOOLS: list[dict[str, Any]] = [
