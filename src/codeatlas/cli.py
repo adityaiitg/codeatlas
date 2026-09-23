@@ -62,7 +62,6 @@ hook_app = typer.Typer(help="Manage Git hooks for automatic incremental re-index
 app.add_typer(hook_app, name="hook")
 
 
-
 @app.callback()
 def main(
     version: bool = typer.Option(
@@ -144,9 +143,7 @@ def watch(
     path: Path = typer.Argument(Path("."), help="Path to repository to watch"),
     interval: int = typer.Option(3, "--interval", "-i", help="Polling interval in seconds"),
     no_vectors: bool = typer.Option(False, "--no-vectors", help="Skip dense vector embeddings"),
-    fast: bool = typer.Option(
-        True, "--fast/--no-fast", help="Use fast Model2Vec embeddings"
-    ),
+    fast: bool = typer.Option(True, "--fast/--no-fast", help="Use fast Model2Vec embeddings"),
 ) -> None:
     """Watch repository for file modifications and incrementally re-index."""
     import time
@@ -339,7 +336,11 @@ def impact(
     matches = [n for n in gq.G.nodes if symbol in n]
     if not matches:
         if json_out:
-            typer.echo(json.dumps({"target": symbol, "matches": [], "direct_dependents": [], "affected_count": 0}))
+            typer.echo(
+                json.dumps(
+                    {"target": symbol, "matches": [], "direct_dependents": [], "affected_count": 0}
+                )
+            )
             return
         console.print(f"[yellow]Symbol '{symbol}' not found in knowledge graph.[/yellow]")
         return
@@ -589,14 +590,22 @@ def install(
     agents = None if target == "all" else [target]
     results = install_all(agents)
 
-    table = Table(title="CodeAtlas Agent MCP Installation", show_header=True, header_style="bold cyan")
+    table = Table(
+        title="CodeAtlas Agent MCP Installation", show_header=True, header_style="bold cyan"
+    )
     table.add_column("Agent", style="cyan")
     table.add_column("Configuration File", style="dim")
     table.add_column("Status", style="green")
 
     for r in results:
-        status_color = "green" if r.action == "configured" else ("yellow" if r.action == "already_present" else "red")
-        table.add_row(r.agent.capitalize(), str(r.config_path), f"[{status_color}]{r.action}[/{status_color}]")
+        status_color = (
+            "green"
+            if r.action == "configured"
+            else ("yellow" if r.action == "already_present" else "red")
+        )
+        table.add_row(
+            r.agent.capitalize(), str(r.config_path), f"[{status_color}]{r.action}[/{status_color}]"
+        )
 
     console.print(table)
     console.print("[bold green]✓ Agent configuration updated![/bold green]\n")
@@ -638,7 +647,9 @@ def hook_install(
 
     hooks = tracker.install_hooks()
     console.print(f"[bold green]✓ Installed CodeAtlas git hooks:[/bold green] {', '.join(hooks)}")
-    console.print("[dim]CodeAtlas will now automatically re-index incrementally in the background on commit and checkout.[/dim]\n")
+    console.print(
+        "[dim]CodeAtlas will now automatically re-index incrementally in the background on commit and checkout.[/dim]\n"
+    )
 
 
 @hook_app.command("uninstall")
@@ -653,7 +664,9 @@ def hook_uninstall(
 
     hooks = tracker.uninstall_hooks()
     if hooks:
-        console.print(f"[bold yellow]✓ Removed CodeAtlas git hooks:[/bold yellow] {', '.join(hooks)}\n")
+        console.print(
+            f"[bold yellow]✓ Removed CodeAtlas git hooks:[/bold yellow] {', '.join(hooks)}\n"
+        )
     else:
         console.print("[dim]No CodeAtlas hooks found in repository.[/dim]\n")
 

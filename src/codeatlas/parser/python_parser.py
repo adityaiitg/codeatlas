@@ -169,7 +169,11 @@ class PythonParser(LanguageParser):
                 self.class_node_id: str | None = None
 
             def visit_ClassDef(self, node: ast.ClassDef):
-                start = node.decorator_list[0].lineno if getattr(node, "decorator_list", None) else node.lineno
+                start = (
+                    node.decorator_list[0].lineno
+                    if getattr(node, "decorator_list", None)
+                    else node.lineno
+                )
                 end = getattr(node, "end_lineno", start)
                 class_src = "".join(lines[start - 1 : end])
                 class_hash = hashlib.sha256(class_src.encode()).hexdigest()
@@ -180,7 +184,7 @@ class PythonParser(LanguageParser):
                 # Extract calls only from class-level statements, avoiding walking methods twice
                 class_calls: list[str] = []
                 for stmt in node.body:
-                    if not isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    if not isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                         class_calls.extend(self.parser._extract_calls(stmt))
                 calls = list(dict.fromkeys(class_calls))
 
@@ -268,7 +272,11 @@ class PythonParser(LanguageParser):
             def _handle_function(
                 self, node: ast.FunctionDef | ast.AsyncFunctionDef, is_async: bool
             ):
-                start = node.decorator_list[0].lineno if getattr(node, "decorator_list", None) else node.lineno
+                start = (
+                    node.decorator_list[0].lineno
+                    if getattr(node, "decorator_list", None)
+                    else node.lineno
+                )
                 end = getattr(node, "end_lineno", start)
                 fn_src = "".join(lines[start - 1 : end])
                 fn_hash = hashlib.sha256(fn_src.encode()).hexdigest()
@@ -366,12 +374,12 @@ class PythonParser(LanguageParser):
 
                 # Visit nested statements without re-processing this function
                 for child in node.body:
-                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                    if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
                         self.visit(child)
 
         visitor = Visitor(self)
         for stmt in tree.body:
-            if isinstance(stmt, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+            if isinstance(stmt, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
                 visitor.visit(stmt)
 
         return symbols, chunks, edges

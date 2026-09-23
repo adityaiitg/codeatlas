@@ -44,4 +44,3 @@ def test_git_tracker_hooks(tmp_path: Path):
     assert "post-commit" in uninstalled
     assert not (tmp_path / ".git" / "hooks" / "post-commit").exists()
     repo.close()
-

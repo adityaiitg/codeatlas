@@ -92,15 +92,17 @@ def run_benchmark() -> int:
                 p99 = latencies[-1]
 
                 all_p50s.append(p50)
-                results_table.append({
-                    "query": q,
-                    "category": cat,
-                    "count": res_count,
-                    "top_is_def": "✓" if top_is_def else "✗",
-                    "p50_ms": p50,
-                    "p95_ms": p95,
-                    "p99_ms": p99,
-                })
+                results_table.append(
+                    {
+                        "query": q,
+                        "category": cat,
+                        "count": res_count,
+                        "top_is_def": "✓" if top_is_def else "✗",
+                        "p50_ms": p50,
+                        "p95_ms": p95,
+                        "p99_ms": p99,
+                    }
+                )
 
         # 3. Print Results in GitHub Markdown Format
         print("| Query | Category | Results | Top Is Def | P50 (ms) | P95 (ms) | P99 (ms) |")

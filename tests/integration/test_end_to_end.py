@@ -83,6 +83,7 @@ def test_indexer_stat_first_incremental(tmp_path: Path):
 
     # Modify file1
     import time
+
     time.sleep(0.01)
     f1.write_text("def foo(): return 42\n", encoding="utf-8")
 
@@ -91,4 +92,3 @@ def test_indexer_stat_first_incremental(tmp_path: Path):
     assert stats3["indexed_files_this_run"] == 1
 
     indexer.close()
-

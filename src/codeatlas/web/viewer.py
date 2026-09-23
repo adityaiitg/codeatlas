@@ -360,7 +360,11 @@ class ViewerHandler(BaseHTTPRequestHandler):
     def _handle_api_graph(self) -> None:
         nodes = []
         for n in self.gq.G.nodes:
-            kind = "module" if n.startswith("file:") else ("class" if ":" in n and "." not in n.split(":")[-1] else "function")
+            kind = (
+                "module"
+                if n.startswith("file:")
+                else ("class" if ":" in n and "." not in n.split(":")[-1] else "function")
+            )
             name = n.split(":")[-1]
             nodes.append({"id": n, "name": name, "kind": kind, "file_path": n.split(":")[0]})
 
@@ -416,7 +420,9 @@ def start_viewer(
     """Start local web viewer server."""
     settings = Settings(repo_path=repo_path, data_dir=repo_path / ".codeatlas")
     if not settings.db_path.exists():
-        raise FileNotFoundError(f"Database not found at {settings.db_path}. Please run 'codeatlas index' first.")
+        raise FileNotFoundError(
+            f"Database not found at {settings.db_path}. Please run 'codeatlas index' first."
+        )
 
     gq = GraphQueries(settings.db_path)
 

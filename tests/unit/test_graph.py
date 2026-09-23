@@ -145,4 +145,3 @@ def test_graph_linker(tmp_path: Path):
     assert sym1.node_id in callers
     callees = gq.get_callees(sym1.node_id)
     assert sym2.node_id in callees
-

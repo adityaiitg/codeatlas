@@ -73,6 +73,7 @@ class Calculator:
     )
     assert res_search_json.exit_code == 0
     import json
+
     data = json.loads(res_search_json.stdout)
     assert isinstance(data, list)
     assert len(data) > 0
@@ -145,4 +146,3 @@ def test_cli_hook_commands(tmp_path: Path):
     assert res_uninstall.exit_code == 0
     assert "Removed CodeAtlas git hooks" in res_uninstall.stdout
     repo.close()
-

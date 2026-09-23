@@ -168,4 +168,3 @@ class GitTracker:
             uninstalled_hooks.append(hook_name)
 
         return uninstalled_hooks
-

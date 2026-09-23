@@ -141,7 +141,9 @@ class WikiGenerator:
 | :--- | :--- | :--- |
 """
         for fpath, syms in sorted(files_map.items()):
-            sym_names_str = ", ".join(f"`{s['name']}`" for s in syms if s["kind"] in ("class", "function"))
+            sym_names_str = ", ".join(
+                f"`{s['name']}`" for s in syms if s["kind"] in ("class", "function")
+            )
             summary = next((s["docstring"] for s in syms if s["docstring"]), "Source module")
             first_line = summary.split("\n")[0] if summary else ""
             rel_path = Path(fpath).name

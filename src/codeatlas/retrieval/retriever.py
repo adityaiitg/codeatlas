@@ -212,7 +212,9 @@ class Retriever:
             try:
                 sem_results = self._search_semantic(query, limit=50)
             except Exception as exc:
-                logger.warning("Semantic search unavailable: %s; falling back to lexical search", exc)
+                logger.warning(
+                    "Semantic search unavailable: %s; falling back to lexical search", exc
+                )
                 sem_results = []
                 if mode == "semantic" and not lex_results:
                     lex_results = self._search_lexical(query, limit=50)
@@ -273,8 +275,16 @@ class Retriever:
             file_stem = Path(chunk_data["file_path"]).stem.lower()
             is_stem_match = (
                 clean_q == file_stem
-                or (clean_q.endswith("s") and not clean_q.endswith("ss") and clean_q[:-1] == file_stem)
-                or (file_stem.endswith("s") and not file_stem.endswith("ss") and file_stem[:-1] == clean_q)
+                or (
+                    clean_q.endswith("s")
+                    and not clean_q.endswith("ss")
+                    and clean_q[:-1] == file_stem
+                )
+                or (
+                    file_stem.endswith("s")
+                    and not file_stem.endswith("ss")
+                    and file_stem[:-1] == clean_q
+                )
             )
             if file_stem and is_stem_match:
                 rrf_score *= 1.4
@@ -313,7 +323,10 @@ class Retriever:
                 best_chunk_per_file: dict[str, SearchResult] = {}
                 for c in scored_chunks:
                     file_scores[c.file_path] = file_scores.get(c.file_path, 0.0) + c.score
-                    if c.file_path not in best_chunk_per_file or c.score > best_chunk_per_file[c.file_path].score:
+                    if (
+                        c.file_path not in best_chunk_per_file
+                        or c.score > best_chunk_per_file[c.file_path].score
+                    ):
                         best_chunk_per_file[c.file_path] = c
 
                 max_file_score = max(file_scores.values())

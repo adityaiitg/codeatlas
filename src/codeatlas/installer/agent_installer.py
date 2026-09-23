@@ -99,9 +99,7 @@ def configure_agent(agent: str, remove: bool = False) -> list[InstallResult]:
             parsed_data = safe_load_config(config_file)
             if parsed_data is None:
                 # Do NOT overwrite existing user configuration if it fails to parse!
-                logger.error(
-                    "Skipping %s due to parse failure to prevent data loss.", config_file
-                )
+                logger.error("Skipping %s due to parse failure to prevent data loss.", config_file)
                 results.append(
                     InstallResult(
                         agent=agent,
@@ -133,19 +131,29 @@ def configure_agent(agent: str, remove: bool = False) -> list[InstallResult]:
                 except OSError as exc:
                     logger.warning("Could not create backup for %s: %s", config_file, exc)
                 config_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
-                results.append(InstallResult(agent=agent, config_path=config_file, action="removed"))
+                results.append(
+                    InstallResult(agent=agent, config_path=config_file, action="removed")
+                )
         else:
             # Add configuration
             if agent == "opencode":
                 mcp_dict = data.setdefault("mcp", {})
                 if "codeatlas" in mcp_dict:
-                    results.append(InstallResult(agent=agent, config_path=config_file, action="already_present"))
+                    results.append(
+                        InstallResult(
+                            agent=agent, config_path=config_file, action="already_present"
+                        )
+                    )
                     continue
                 mcp_dict["codeatlas"] = get_mcp_config_entry(agent)
             else:
                 mcp_dict = data.setdefault("mcpServers", {})
                 if "codeatlas" in mcp_dict:
-                    results.append(InstallResult(agent=agent, config_path=config_file, action="already_present"))
+                    results.append(
+                        InstallResult(
+                            agent=agent, config_path=config_file, action="already_present"
+                        )
+                    )
                     continue
                 mcp_dict["codeatlas"] = get_mcp_config_entry(agent)
 

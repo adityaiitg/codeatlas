@@ -83,4 +83,3 @@ def test_configure_agent_corrupted_safeguard(tmp_path: Path, monkeypatch):
 
     # Crucial: content was NOT overwritten or wiped!
     assert test_cfg.read_text(encoding="utf-8") == broken_content
-

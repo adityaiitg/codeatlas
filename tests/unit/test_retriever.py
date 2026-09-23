@@ -163,4 +163,3 @@ def test_retriever_metadata_sync_fast_mode(tmp_path: Path):
     retriever = Retriever(settings)
     assert retriever.settings.embedding_model == "minishlab/potion-code-16M-v2"
     assert retriever.settings.embedding_dim == 256
-

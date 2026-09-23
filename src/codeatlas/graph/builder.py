@@ -212,9 +212,7 @@ class GraphBuilder:
         if self._has_vec and vec_plugin_rows:
             try:
                 del_rows = [(cid,) for cid, _ in vec_plugin_rows]
-                self.conn.executemany(
-                    "DELETE FROM chunk_vectors_vec WHERE chunk_id = ?", del_rows
-                )
+                self.conn.executemany("DELETE FROM chunk_vectors_vec WHERE chunk_id = ?", del_rows)
                 self.conn.executemany(
                     "INSERT INTO chunk_vectors_vec (chunk_id, embedding) VALUES (?, ?)",
                     vec_plugin_rows,

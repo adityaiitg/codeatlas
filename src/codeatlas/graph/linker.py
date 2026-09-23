@@ -28,9 +28,7 @@ class GraphLinker:
 
         with get_db_connection(self.db_path) as conn:
             # 1. Load all defined symbols
-            cursor = conn.execute(
-                "SELECT node_id, file_path, name, kind, parent_id FROM symbols"
-            )
+            cursor = conn.execute("SELECT node_id, file_path, name, kind, parent_id FROM symbols")
             symbols = cursor.fetchall()
             if not symbols:
                 return 0
@@ -186,11 +184,7 @@ class GraphLinker:
                 # Module call: import module; module.func()
                 if "." in callee:
                     mod_part, fn_part = callee.rsplit(".", 1)
-                    if (
-                        imp_alias == mod_part
-                        or imp_name == mod_part
-                        or imp_mod.endswith(mod_part)
-                    ):
+                    if imp_alias == mod_part or imp_name == mod_part or imp_mod.endswith(mod_part):
                         candidates = by_name.get(fn_part, [])
                         for cand in candidates:
                             cand_fpath = cand["file_path"].replace("/", ".").replace("\\", ".")

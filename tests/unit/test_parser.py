@@ -136,5 +136,3 @@ def test_file_scanner_symlink_and_pruning(tmp_path: Path):
     assert "leak.py" not in scanned_paths
     if internal_symlink.exists():
         assert "main_link.py" in scanned_paths
-
-
